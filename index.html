@@ -104,7 +104,11 @@
     
     <iframe 
         src="https://script.google.com/macros/s/AKfycbzDmjOQUY8cmLRyQ5Yvi83xdSzhGKYzBIydYzIFsg4_f09-hsmBr-z9bzM0h9o5dGlmgQ/exec" 
-        onload="document.getElementById('loader').style.display='none';" 
+        onload="
+            var loader = document.getElementById('loader-container');
+            loader.style.opacity = '0';
+            setTimeout(function(){ loader.style.visibility = 'hidden'; loader.style.display = 'none'; }, 500);
+        " 
         allowfullscreen>
     </iframe>
 
