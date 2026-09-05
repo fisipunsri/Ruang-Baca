@@ -39,6 +39,13 @@
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased min-h-screen flex flex-col items-center py-6 px-4 sm:px-6">
 
+  <!-- REVISI (FITUR BARU): Audio latar & tombol kontrol musik -->
+  <audio id="audioLatar" loop preload="none"></audio>
+  <button id="btnMusik" onclick="toggleMusik()" title="Putar/Jeda Musik"
+          class="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-unsri-navy text-white shadow-lg flex items-center justify-center hover:bg-blue-900 transition-all duration-300">
+    <i id="iconMusik" class="fa-solid fa-music text-lg"></i>
+  </button>
+
   <div class="w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
     
     <div class="h-48 sm:h-64 w-full bg-cover bg-center relative" 
@@ -252,6 +259,99 @@
 
     // Variabel global untuk menampung riwayat data di client-side demi validasi NIM ganda
     window.globalRiwayat = [];
+
+    // ==========================================
+    // REVISI (FITUR BARU): Sapaan suara & musik latar otomatis
+    // ==========================================
+    const audioLatar = document.getElementById('audioLatar');
+    let pengalamanAudioDimulai = false;
+    let musikUrlAktif = '';
+
+    function ambilSuaraCewek(daftarSuara) {
+      return daftarSuara.find(function(v) { return v.lang && v.lang.toLowerCase().indexOf('id') === 0 && /female|wanita|perempuan/i.test(v.name); })
+          || daftarSuara.find(function(v) { return v.lang && v.lang.toLowerCase().indexOf('id') === 0; })
+          || daftarSuara.find(function(v) { return /female|wanita|perempuan/i.test(v.name); })
+          || null;
+    }
+
+    function putarSuara(teks, onSelesai) {
+      if (!('speechSynthesis' in window)) {
+        if (onSelesai) onSelesai();
+        return;
+      }
+
+      const ucapkan = function() {
+        const utter = new SpeechSynthesisUtterance(teks);
+        utter.lang = 'id-ID';
+        utter.pitch = 1.1;
+        utter.rate = 0.95;
+
+        const suaraCewek = ambilSuaraCewek(window.speechSynthesis.getVoices());
+        if (suaraCewek) utter.voice = suaraCewek;
+
+        utter.onend = function() { if (onSelesai) onSelesai(); };
+        utter.onerror = function() { if (onSelesai) onSelesai(); };
+
+        window.speechSynthesis.speak(utter);
+      };
+
+      if (window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.onvoiceschanged = ucapkan;
+      } else {
+        ucapkan();
+      }
+    }
+
+    function updateIconMusik(sedangMain) {
+      const icon = document.getElementById('iconMusik');
+      if (!icon) return;
+      icon.classList.toggle('fa-music', !sedangMain);
+      icon.classList.toggle('fa-volume-high', sedangMain);
+    }
+
+    function mulaiMusik() {
+      if (!musikUrlAktif) return;
+      if (!audioLatar.src) audioLatar.src = musikUrlAktif;
+      audioLatar.volume = 0.6;
+      audioLatar.play()
+        .then(function() { updateIconMusik(true); })
+        .catch(function() { updateIconMusik(false); });
+    }
+
+    function mulaiPengalamanAudio() {
+      if (pengalamanAudioDimulai) return;
+      pengalamanAudioDimulai = true;
+
+      putarSuara('Selamat datang pengunjung yang terhormat di ruang baca FISIP Unsri', function() {
+        mulaiMusik();
+      });
+    }
+
+    function toggleMusik() {
+      if (!musikUrlAktif) return;
+      if (audioLatar.paused) {
+        mulaiMusik();
+      } else {
+        audioLatar.pause();
+        updateIconMusik(false);
+      }
+    }
+
+    function putarUcapanTerimaKasih() {
+      const musikSedangMain = musikUrlAktif && !audioLatar.paused;
+      if (musikSedangMain) audioLatar.volume = 0.15;
+
+      putarSuara('Terima kasih telah berkunjung ke ruang baca FISIP Unsri', function() {
+        if (musikSedangMain) audioLatar.volume = 0.6;
+      });
+    }
+
+    // Fallback: browser umumnya memblokir audio/suara otomatis sebelum ada
+    // interaksi pengguna. Sentuhan/klik pertama di halaman akan memicu
+    // sapaan & musik latar apabila autoplay saat load gagal.
+    document.addEventListener('click', function() {
+      mulaiPengalamanAudio();
+    }, { once: true });
 
     function updateClock() {
       const now = new Date();
@@ -479,6 +579,8 @@
               timer: 3000,
               timerProgressBar: true
             });
+            // REVISI (FITUR BARU): Ucapan terima kasih setelah berhasil simpan kunjungan
+            putarUcapanTerimaKasih();
             document.getElementById('formKunjungan').reset();
             document.getElementById('containerFile').classList.add('hidden');
             document.getElementById('containerBuku').innerHTML = '';
@@ -513,6 +615,13 @@
           }
 
           window.globalRiwayat = data.riwayat || [];
+
+          // REVISI (FITUR BARU): Ambil URL lagu dari spreadsheet (sheet "Pengaturan")
+          // lalu mulai sapaan suara + musik latar (hanya berjalan sekali).
+          if (data.musikUrl) {
+            musikUrlAktif = data.musikUrl;
+            mulaiPengalamanAudio();
+          }
 
           document.getElementById('statTotalToday').innerText = data.totalKunjungan || 0;
 
