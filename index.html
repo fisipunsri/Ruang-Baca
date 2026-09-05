@@ -367,7 +367,7 @@
       // begitu sapaan suara selesai, musik langsung terdengar tanpa jeda.
       cobaBuatPlayerYoutube();
 
-      putarSuara('Selamat datang pengunjung yang terhormat di ruang baca FISIP Unsri', function() {
+      putarSuara('Diucapkan selamat datang bagi pengunjung ruang baca FISIP Unsri', function() {
         mulaiMusik();
       });
     }
@@ -392,17 +392,38 @@
       const musikSedangMain = ytPlayer && ytPlayerSiap && ytPlayer.getPlayerState() === YT.PlayerState.PLAYING;
       if (musikSedangMain) ytPlayer.setVolume(15);
 
-      putarSuara('Terima kasih telah berkunjung ke ruang baca FISIP Unsri', function() {
+      putarSuara('Diucapkan terima kasih telah berkunjung ke ruang baca FISIP Unsri', function() {
         if (musikSedangMain) ytPlayer.setVolume(60);
       });
     }
 
-    // Fallback: browser umumnya memblokir audio/suara otomatis sebelum ada
-    // interaksi pengguna. Sentuhan/klik pertama di halaman akan memicu
-    // sapaan & musik latar apabila autoplay saat load gagal.
-    document.addEventListener('click', function() {
-      mulaiPengalamanAudio();
-    }, { once: true });
+    // REVISI (PERBAIKAN): Browser (Chrome/Safari/dll) memblokir audio
+    // bersuara otomatis tanpa interaksi pengguna sama sekali di halaman -
+    // ini kebijakan platform browser, bukan hal yang bisa dilewati lewat
+    // kode. Sebelumnya fallback ini tidak benar-benar memutar musik karena
+    // mulaiPengalamanAudio() sudah dianggap "selesai" oleh percobaan
+    // otomatis saat load, sehingga klik berikutnya cuma di-skip. Sekarang:
+    // sentuhan/klik/tombol keyboard PERTAMA di mana saja pada halaman akan
+    // langsung memutar musik (bukan cuma lewat tombol ikon musik).
+    let audioSudahDibuka = false;
+    function bukaKunciAudioOtomatis() {
+      if (audioSudahDibuka) return;
+      audioSudahDibuka = true;
+
+      if (!pengalamanAudioDimulai) {
+        mulaiPengalamanAudio();
+      } else if (musikYoutubeIdAktif) {
+        musikBolehDiputar = true;
+        if (ytPlayer && ytPlayerSiap) {
+          ytPlayer.playVideo();
+        } else {
+          cobaBuatPlayerYoutube();
+        }
+      }
+    }
+    ['click', 'touchstart', 'keydown'].forEach(function(evt) {
+      document.addEventListener(evt, bukaKunciAudioOtomatis, { once: true, passive: true });
+    });
 
     function updateClock() {
       const now = new Date();
