@@ -322,7 +322,7 @@
       if (pengalamanAudioDimulai) return;
       pengalamanAudioDimulai = true;
 
-      putarSuara('Selamat datang pengunjung yang terhormat di ruang baca FISIP Unsri', function() {
+      putarSuara('Diucapkan Selamat datang pengunjung yang terhormat di ruang baca FISIP Unsri', function() {
         mulaiMusik();
       });
     }
@@ -341,7 +341,7 @@
       const musikSedangMain = musikUrlAktif && !audioLatar.paused;
       if (musikSedangMain) audioLatar.volume = 0.15;
 
-      putarSuara('Terima kasih telah berkunjung ke ruang baca FISIP Unsri', function() {
+      putarSuara('Diucapkan Terima kasih telah berkunjung ke ruang baca FISIP Unsri', function() {
         if (musikSedangMain) audioLatar.volume = 0.6;
       });
     }
