@@ -242,17 +242,6 @@
     
   </div>
 
-  <!-- REVISI: Musik latar (URL diambil dari Spreadsheet lewat action=getSettings) -->
-  <audio id="bgMusic" loop></audio>
-
-  <div id="musicWidget" class="hidden fixed bottom-6 right-6 z-50">
-    <span id="musicPulse" class="hidden absolute inset-0 rounded-full bg-unsri-gold opacity-75 animate-ping"></span>
-    <button id="musicToggle" onclick="toggleMusik()" title="Musik Latar"
-            class="relative w-14 h-14 rounded-full bg-unsri-navy hover:bg-blue-900 shadow-lg flex items-center justify-center transition transform hover:scale-105">
-      <i id="musicIcon" class="fa-solid fa-music text-white text-lg"></i>
-    </button>
-  </div>
-
   <footer class="mt-8 text-center text-gray-400 text-xs sm:text-sm pb-8">
     © 2026 Ruang Baca FISIP UNSRI. Sistem oleh <b>Purwo Julianto</b>.
   </footer>
@@ -274,12 +263,6 @@
 
     // Memuat data riwayat kunjungan langsung saat pertama kali halaman di-load
     loadDashboardData();
-
-    // REVISI: Sambutan suara + musik latar saat halaman pertama kali dibuka.
-    // Catatan: browser modern (Chrome/Safari, dsb) umumnya memblokir audio
-    // yang diputar otomatis tanpa interaksi pengguna. Kalau itu terjadi,
-    // ikon musik di pojok kanan bawah akan berkedip menunggu diklik.
-    initSambutanMusik();
 
     document.getElementById('keterangan').addEventListener('change', function() {
       const containerFile = document.getElementById('containerFile');
@@ -353,159 +336,6 @@
         `;
         containerBuku.appendChild(wrapper);
       }
-    }
-
-    // ============================================================
-    // REVISI: Sambutan suara (Web Speech API) + musik latar (Google Drive)
-    // ============================================================
-    let pengaturanSudahDiambil = false;
-    let musikSudahDiputar = false;
-    let musikSedangDimainkan = false;
-
-    function initSambutanMusik() {
-      if (pengaturanSudahDiambil) { mulaiSambutan(); return; }
-
-      fetch(WEB_APP_URL + '?action=getSettings')
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-          pengaturanSudahDiambil = true;
-          if (data && data.musikUrl) {
-            document.getElementById('bgMusic').src = data.musikUrl;
-            document.getElementById('musicWidget').classList.remove('hidden');
-          }
-          mulaiSambutan();
-        })
-        .catch(function() {
-          pengaturanSudahDiambil = true;
-          mulaiSambutan();
-        });
-    }
-
-    function mulaiSambutan() {
-      // REVISI: Chrome punya bug lama di mana speechSynthesis.speak() yang
-      // dipanggil PERSIS saat halaman baru dimuat sering tidak bersuara sama
-      // sekali (tanpa error). cancel() + sedikit delay adalah workaround yang
-      // umum dipakai untuk masalah ini.
-      if ('speechSynthesis' in window) {
-        speechSynthesis.cancel();
-      }
-      setTimeout(function() {
-        ucapkan('Selamat datang pengunjung yang terhormat di ruang baca FISIP Unsri', putarMusik);
-      }, 300);
-    }
-
-    // Mengucapkan teks lewat Web Speech API, memilih suara Bahasa Indonesia
-    // (diprioritaskan yang terdengar seperti suara perempuan bila tersedia).
-    function ucapkan(teks, onSelesai) {
-      if (!('speechSynthesis' in window)) {
-        if (onSelesai) onSelesai();
-        return;
-      }
-
-      const bicara = function() {
-        const utter = new SpeechSynthesisUtterance(teks);
-        utter.lang = 'id-ID';
-        utter.pitch = 1.15;
-        utter.rate = 0.95;
-
-        const semuaSuara = speechSynthesis.getVoices();
-        const suaraId = semuaSuara.filter(function(v) { return v.lang && v.lang.toLowerCase().indexOf('id') === 0; });
-        const suaraCewek = suaraId.find(function(v) { return /female|wanita|perempuan|damayanti/i.test(v.name); }) || suaraId[0];
-        if (suaraCewek) utter.voice = suaraCewek;
-
-        utter.onend = function() { if (onSelesai) onSelesai(); };
-        utter.onerror = function() { if (onSelesai) onSelesai(); };
-        speechSynthesis.speak(utter);
-      };
-
-      if (speechSynthesis.getVoices().length > 0) {
-        bicara();
-      } else {
-        // REVISI: di sebagian browser, event 'voiceschanged' kadang tidak pernah
-        // terpicu. Beri batas waktu supaya tetap bicara (pakai suara default)
-        // walau daftar suara id-ID belum sempat siap.
-        let sudahBicara = false;
-        speechSynthesis.onvoiceschanged = function() {
-          if (sudahBicara) return;
-          sudahBicara = true;
-          bicara();
-        };
-        setTimeout(function() {
-          if (sudahBicara) return;
-          sudahBicara = true;
-          bicara();
-        }, 1000);
-      }
-    }
-
-    function putarMusik() {
-      const audio = document.getElementById('bgMusic');
-      if (!audio.src) return;
-
-      audio.volume = 0.6;
-      const p = audio.play();
-      if (p !== undefined) {
-        p.then(function() {
-          musikSudahDiputar = true;
-          musikSedangDimainkan = true;
-          updateIkonMusik('main');
-        }).catch(function() {
-          // Autoplay diblokir browser: tunggu pengunjung klik ikon musik
-          updateIkonMusik('tunggu-klik');
-        });
-      }
-    }
-
-    function toggleMusik() {
-      if (!musikSudahDiputar) {
-        // Klik ini dianggap browser sebagai izin memutar audio,
-        // jadi jalankan ulang seluruh sambutan (suara + musik).
-        initSambutanMusik();
-        return;
-      }
-
-      const audio = document.getElementById('bgMusic');
-      if (musikSedangDimainkan) {
-        audio.pause();
-        musikSedangDimainkan = false;
-        updateIkonMusik('jeda');
-      } else {
-        audio.play().then(function() {
-          musikSedangDimainkan = true;
-          updateIkonMusik('main');
-        }).catch(function() {});
-      }
-    }
-
-    function updateIkonMusik(status) {
-      const icon = document.getElementById('musicIcon');
-      const pulse = document.getElementById('musicPulse');
-      if (!icon || !pulse) return;
-
-      pulse.classList.add('hidden');
-
-      if (status === 'main') {
-        icon.className = 'fa-solid fa-music text-white text-lg';
-      } else if (status === 'jeda') {
-        icon.className = 'fa-solid fa-play text-white text-lg';
-      } else if (status === 'tunggu-klik') {
-        icon.className = 'fa-solid fa-volume-high text-white text-lg';
-        pulse.classList.remove('hidden');
-      }
-    }
-
-    // Ucapan terima kasih setelah kunjungan berhasil disimpan.
-    // Volume musik latar diredupkan sementara supaya suara terdengar jelas.
-    function ucapkanTerimaKasih() {
-      const audio = document.getElementById('bgMusic');
-      const sedangMain = audio && !audio.paused;
-      const volumeSemula = sedangMain ? audio.volume : null;
-
-      if (sedangMain) audio.volume = 0.15;
-
-      ucapkan('Terima kasih telah berkunjung ke ruang baca FISIP Unsri', function() {
-        if (sedangMain && volumeSemula !== null) audio.volume = volumeSemula;
-      });
     }
 
     function switchTab(tab) {
@@ -653,9 +483,6 @@
             document.getElementById('containerFile').classList.add('hidden');
             document.getElementById('containerBuku').innerHTML = '';
             loadDashboardData();
-
-            // REVISI: Ucapan terima kasih setelah kunjungan berhasil disimpan
-            ucapkanTerimaKasih();
           } else {
             Swal.fire('Error!', 'Gagal menyimpan: ' + response.message, 'error');
           }
