@@ -382,7 +382,16 @@
     }
 
     function mulaiSambutan() {
-      ucapkan('Selamat datang pengunjung yang terhormat di ruang baca FISIP Unsri', putarMusik);
+      // REVISI: Chrome punya bug lama di mana speechSynthesis.speak() yang
+      // dipanggil PERSIS saat halaman baru dimuat sering tidak bersuara sama
+      // sekali (tanpa error). cancel() + sedikit delay adalah workaround yang
+      // umum dipakai untuk masalah ini.
+      if ('speechSynthesis' in window) {
+        speechSynthesis.cancel();
+      }
+      setTimeout(function() {
+        ucapkan('Selamat datang pengunjung yang terhormat di ruang baca FISIP Unsri', putarMusik);
+      }, 300);
     }
 
     // Mengucapkan teks lewat Web Speech API, memilih suara Bahasa Indonesia
@@ -412,7 +421,20 @@
       if (speechSynthesis.getVoices().length > 0) {
         bicara();
       } else {
-        speechSynthesis.onvoiceschanged = bicara;
+        // REVISI: di sebagian browser, event 'voiceschanged' kadang tidak pernah
+        // terpicu. Beri batas waktu supaya tetap bicara (pakai suara default)
+        // walau daftar suara id-ID belum sempat siap.
+        let sudahBicara = false;
+        speechSynthesis.onvoiceschanged = function() {
+          if (sudahBicara) return;
+          sudahBicara = true;
+          bicara();
+        };
+        setTimeout(function() {
+          if (sudahBicara) return;
+          sudahBicara = true;
+          bicara();
+        }, 1000);
       }
     }
 
