@@ -10,6 +10,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
 
   <script>
     tailwind.config = {
@@ -39,8 +40,8 @@
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased min-h-screen flex flex-col items-center py-6 px-4 sm:px-6">
 
-  <!-- REVISI (FITUR BARU): Audio latar & tombol kontrol musik -->
-  <audio id="audioLatar" loop preload="none"></audio>
+  <!-- REVISI (FITUR BARU): Player YouTube tersembunyi (musik latar) & tombol kontrol musik -->
+  <div id="playerYoutube" style="position:absolute; width:0; height:0; overflow:hidden;"></div>
   <button id="btnMusik" onclick="toggleMusik()" title="Putar/Jeda Musik"
           class="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-unsri-navy text-white shadow-lg flex items-center justify-center hover:bg-blue-900 transition-all duration-300">
     <i id="iconMusik" class="fa-solid fa-music text-lg"></i>
@@ -261,11 +262,50 @@
     window.globalRiwayat = [];
 
     // ==========================================
-    // REVISI (FITUR BARU): Sapaan suara & musik latar otomatis
+    // REVISI (FITUR BARU): Sapaan suara & musik latar dari YouTube
     // ==========================================
-    const audioLatar = document.getElementById('audioLatar');
     let pengalamanAudioDimulai = false;
-    let musikUrlAktif = '';
+    let musikYoutubeIdAktif = '';
+    let youtubeApiSiap = false;
+    let ytPlayer = null;
+    let ytPlayerSiap = false;
+    let musikBolehDiputar = false;
+
+    // Dipanggil otomatis oleh script YouTube IFrame API begitu selesai dimuat.
+    function onYouTubeIframeAPIReady() {
+      youtubeApiSiap = true;
+      cobaBuatPlayerYoutube();
+    }
+
+    function cobaBuatPlayerYoutube() {
+      if (!youtubeApiSiap || !musikYoutubeIdAktif || ytPlayer) return;
+
+      ytPlayer = new YT.Player('playerYoutube', {
+        height: '0',
+        width: '0',
+        videoId: musikYoutubeIdAktif,
+        playerVars: {
+          loop: 1,
+          playlist: musikYoutubeIdAktif, // wajib diisi sama dengan videoId agar loop 1 video berjalan terus-menerus
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          modestbranding: 1,
+          playsinline: 1
+        },
+        events: {
+          onReady: function(ev) {
+            ytPlayerSiap = true;
+            ev.target.setVolume(60);
+            if (musikBolehDiputar) ev.target.playVideo();
+          },
+          onStateChange: function(ev) {
+            if (ev.data === YT.PlayerState.PLAYING) updateIconMusik(true);
+            if (ev.data === YT.PlayerState.PAUSED) updateIconMusik(false);
+          }
+        }
+      });
+    }
 
     function ambilSuaraCewek(daftarSuara) {
       return daftarSuara.find(function(v) { return v.lang && v.lang.toLowerCase().indexOf('id') === 0 && /female|wanita|perempuan/i.test(v.name); })
@@ -310,39 +350,50 @@
     }
 
     function mulaiMusik() {
-      if (!musikUrlAktif) return;
-      if (!audioLatar.src) audioLatar.src = musikUrlAktif;
-      audioLatar.volume = 0.6;
-      audioLatar.play()
-        .then(function() { updateIconMusik(true); })
-        .catch(function() { updateIconMusik(false); });
+      musikBolehDiputar = true;
+      if (!musikYoutubeIdAktif) return;
+      if (ytPlayerSiap && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+        ytPlayer.playVideo();
+      } else {
+        cobaBuatPlayerYoutube();
+      }
     }
 
     function mulaiPengalamanAudio() {
       if (pengalamanAudioDimulai) return;
       pengalamanAudioDimulai = true;
 
-      putarSuara('Diucapkan Selamat datang pengunjung yang terhormat di ruang baca FISIP Unsri', function() {
+      // Mulai buat & buffer player YouTube dari sekarang (belum diputar) supaya
+      // begitu sapaan suara selesai, musik langsung terdengar tanpa jeda.
+      cobaBuatPlayerYoutube();
+
+      putarSuara('Selamat datang pengunjung yang terhormat di ruang baca FISIP Unsri', function() {
         mulaiMusik();
       });
     }
 
     function toggleMusik() {
-      if (!musikUrlAktif) return;
-      if (audioLatar.paused) {
-        mulaiMusik();
-      } else {
-        audioLatar.pause();
+      if (!musikYoutubeIdAktif) return;
+      if (!ytPlayer || !ytPlayerSiap) {
+        musikBolehDiputar = true;
+        mulaiPengalamanAudio();
+        return;
+      }
+      if (ytPlayer.getPlayerState() === YT.PlayerState.PLAYING) {
+        ytPlayer.pauseVideo();
         updateIconMusik(false);
+      } else {
+        ytPlayer.playVideo();
+        updateIconMusik(true);
       }
     }
 
     function putarUcapanTerimaKasih() {
-      const musikSedangMain = musikUrlAktif && !audioLatar.paused;
-      if (musikSedangMain) audioLatar.volume = 0.15;
+      const musikSedangMain = ytPlayer && ytPlayerSiap && ytPlayer.getPlayerState() === YT.PlayerState.PLAYING;
+      if (musikSedangMain) ytPlayer.setVolume(15);
 
-      putarSuara('Diucapkan Terima kasih telah berkunjung ke ruang baca FISIP Unsri', function() {
-        if (musikSedangMain) audioLatar.volume = 0.6;
+      putarSuara('Terima kasih telah berkunjung ke ruang baca FISIP Unsri', function() {
+        if (musikSedangMain) ytPlayer.setVolume(60);
       });
     }
 
@@ -616,10 +667,11 @@
 
           window.globalRiwayat = data.riwayat || [];
 
-          // REVISI (FITUR BARU): Ambil URL lagu dari spreadsheet (sheet "Pengaturan")
-          // lalu mulai sapaan suara + musik latar (hanya berjalan sekali).
-          if (data.musikUrl) {
-            musikUrlAktif = data.musikUrl;
+          // REVISI (FITUR BARU): Ambil ID video YouTube dari spreadsheet (sheet
+          // "Pengaturan", baris "MusikYoutubeID") lalu mulai sapaan suara +
+          // musik latar (hanya berjalan sekali).
+          if (data.musikYoutubeId) {
+            musikYoutubeIdAktif = data.musikYoutubeId;
             mulaiPengalamanAudio();
           }
 
