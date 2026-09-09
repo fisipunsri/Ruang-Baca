@@ -320,7 +320,15 @@
         return;
       }
 
+      // REVISI (BUG FIX - HP): pakai penanda supaya ucapkan() tidak
+      // terpanggil dua kali kalau event voiceschanged & timeout di bawah
+      // sama-sama terpicu.
+      let sudahDiucapkan = false;
+
       const ucapkan = function() {
+        if (sudahDiucapkan) return;
+        sudahDiucapkan = true;
+
         const utter = new SpeechSynthesisUtterance(teks);
         utter.lang = 'id-ID';
         utter.pitch = 1.1;
@@ -337,6 +345,13 @@
 
       if (window.speechSynthesis.getVoices().length === 0) {
         window.speechSynthesis.onvoiceschanged = ucapkan;
+        // REVISI (BUG FIX - HP): Sebagian browser di HP (terutama beberapa
+        // versi Safari/iOS) TIDAK PERNAH memicu event "voiceschanged",
+        // sehingga sapaan suara jadi macet tanpa batas waktu - dan musik
+        // latar yang menyusul setelah sapaan pun ikut tidak pernah jalan.
+        // Jaring pengaman: kalau daftar suara belum juga siap dalam waktu
+        // singkat, tetap lanjut bicara pakai suara default.
+        setTimeout(ucapkan, 300);
       } else {
         ucapkan();
       }
@@ -432,6 +447,26 @@
     }
     setInterval(updateClock, 1000);
     updateClock();
+
+    // REVISI (BUG FIX): Mengembalikan tanggal hari ini dalam format dd/MM/yyyy
+    // sesuai zona waktu Asia/Jakarta, supaya sinkron dengan format Timestamp
+    // yang disimpan backend (lihat Utilities.formatDate(..., 'Asia/Jakarta',
+    // 'dd/MM/yyyy HH:mm:ss') di Code.gs). Dipakai untuk validasi NIM ganda
+    // supaya hanya membatasi kunjungan PADA HARI YANG SAMA, bukan selamanya.
+    function getTodayDateStrJakarta() {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Jakarta',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      }).formatToParts(new Date());
+
+      const day = parts.find(function(p) { return p.type === 'day'; }).value;
+      const month = parts.find(function(p) { return p.type === 'month'; }).value;
+      const year = parts.find(function(p) { return p.type === 'year'; }).value;
+
+      return day + '/' + month + '/' + year;
+    }
 
     // Memuat data riwayat kunjungan langsung saat pertama kali halaman di-load
     loadDashboardData();
@@ -552,11 +587,22 @@
       
       const nimVal = document.getElementById('nim').value.trim();
 
-      // Validasi proteksi input ganda berdasarkan NIM yang sama
-      if (window.globalRiwayat && window.globalRiwayat.some(row => String(row.nim).trim() === nimVal)) {
+      // REVISI (BUG FIX): Validasi proteksi input ganda berdasarkan NIM yang
+      // sama kini dibatasi PER HARI (memakai tanggal zona waktu Asia/Jakarta),
+      // sehingga NIM yang sama TIDAK diblokir lagi di hari yang berbeda.
+      // Dalam satu hari yang sama, NIM yang sama boleh input maksimal 2 kali;
+      // percobaan input yang ketiga di hari yang sama akan ditolak.
+      const todayStr = getTodayDateStrJakarta();
+      const kunjunganHariIni = window.globalRiwayat
+        ? window.globalRiwayat.filter(function(row) {
+            return String(row.nim).trim() === nimVal && String(row.waktu).trim().indexOf(todayStr) === 0;
+          }).length
+        : 0;
+
+      if (kunjunganHariIni >= 2) {
         Swal.fire({
           title: 'Peringatan!',
-          text: 'User dengan NIM tersebut sudah menginput kunjungan sebelumnya, sehingga tidak bisa input untuk kedua kalinya.',
+          text: 'User dengan NIM tersebut sudah menginput kunjungan sebanyak 2 kali hari ini, sehingga tidak bisa input untuk ketiga kalinya hari ini. Silakan coba lagi besok.',
           icon: 'warning',
           confirmButtonColor: '#1e3a8a'
         });
@@ -653,6 +699,19 @@
             });
             // REVISI (FITUR BARU): Ucapan terima kasih setelah berhasil simpan kunjungan
             putarUcapanTerimaKasih();
+
+            // REVISI (FITUR BARU): Klik tombol "Simpan Kunjungan" adalah
+            // interaksi pengguna yang nyata & jelas, baik di laptop/PC
+            // maupun HP, sehingga momen kunjungan berhasil disimpan ini
+            // dipakai juga sebagai jaminan tambahan supaya musik latar
+            // otomatis terputar (kalau sebelumnya gagal/belum sempat
+            // terputar karena kebijakan autoplay browser).
+            if (!pengalamanAudioDimulai) {
+              mulaiPengalamanAudio();
+            } else {
+              mulaiMusik();
+            }
+
             document.getElementById('formKunjungan').reset();
             document.getElementById('containerFile').classList.add('hidden');
             document.getElementById('containerBuku').innerHTML = '';
@@ -688,12 +747,26 @@
 
           window.globalRiwayat = data.riwayat || [];
 
-          // REVISI (FITUR BARU): Ambil ID video YouTube dari spreadsheet (sheet
-          // "Pengaturan", baris "MusikYoutubeID") lalu mulai sapaan suara +
-          // musik latar (hanya berjalan sekali).
+          // REVISI (BUG FIX - HP): ID video YouTube dari spreadsheet (sheet
+          // "Pengaturan", baris "MusikYoutubeID") disimpan di sini, TAPI
+          // sapaan suara + musik latar TIDAK dipaksa jalan otomatis saat
+          // halaman baru dimuat lagi. Kebijakan autoplay banyak browser di
+          // HP (terutama Safari/iOS) memblokir percobaan tanpa interaksi
+          // pengguna secara diam-diam - dan sebelumnya blokir ini membuat
+          // sapaan suara jadi tidak pernah dicoba ulang sama sekali.
+          // Sapaan + musik akan mulai begitu ada interaksi pengguna PERTAMA
+          // di halaman (lihat bukaKunciAudioOtomatis), dan dijamin dicoba
+          // lagi saat kunjungan berhasil disimpan (lihat kirimDataKeBackend).
           if (data.musikYoutubeId) {
             musikYoutubeIdAktif = data.musikYoutubeId;
-            mulaiPengalamanAudio();
+
+            // Kasus balapan (race condition): pengguna sudah lebih dulu
+            // berinteraksi dengan halaman sebelum ID musik ini selesai
+            // dimuat dari server, jadi musiknya belum sempat diputar saat
+            // itu. Sekarang ID sudah ada, coba mainkan musiknya.
+            if (pengalamanAudioDimulai && musikBolehDiputar) {
+              mulaiMusik();
+            }
           }
 
           document.getElementById('statTotalToday').innerText = data.totalKunjungan || 0;
