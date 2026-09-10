@@ -514,7 +514,7 @@
       cobaBuatPlayerYoutube();
       mulaiMusik();
 
-      putarSuara('Diucapkan selamat datang bagi pengunjung ruang baca FISIP Unsri');
+      putarSuara('Selamat datang bagi pengunjung ruang baca FISIP Unsri');
     }
 
     function toggleMusik() {
@@ -539,7 +539,7 @@
       const musikSedangMain = ytPlayer && ytPlayerSiap && ytPlayer.getPlayerState() === YT.PlayerState.PLAYING;
       if (musikSedangMain) ytPlayer.setVolume(15);
 
-      putarSuara('Diucapkan terima kasih telah berkunjung ke ruang baca FISIP Unsri', function() {
+      putarSuara('Terima kasih telah berkunjung ke ruang baca FISIP Unsri', function() {
         if (musikSedangMain) ytPlayer.setVolume(60);
       });
     }
@@ -620,6 +620,7 @@
       const namaInput = document.getElementById('nama');
       const nimInput = document.getElementById('nim');
       const jurusanInput = document.getElementById('jurusan');
+      const kampusInput = document.getElementById('kampus');
 
       // Reset dulu semua container opsional & field terkait ke kondisi awal
       containerFile.classList.add('hidden');
@@ -642,6 +643,7 @@
       nimInput.required = true;
       nimInput.readOnly = false;
       jurusanInput.disabled = false;
+      kampusInput.disabled = false;
 
       if (this.value === 'Penyerahan Skripsi') {
         containerFile.classList.remove('hidden');
@@ -665,6 +667,7 @@
         nimInput.required = false;
         nimInput.readOnly = true;
         jurusanInput.disabled = true;
+        kampusInput.disabled = true;
       }
     });
 
@@ -709,6 +712,7 @@
       const namaInput = document.getElementById('nama');
       const nimInput = document.getElementById('nim');
       const jurusanInput = document.getElementById('jurusan');
+      const kampusInput = document.getElementById('kampus');
       const notif = document.getElementById('notifTerlambat');
       const displayIds = ['pengembalianTanggalPinjamDisplay', 'pengembalianJudulBukuDisplay', 'pengembalianPengarangDisplay', 'pengembalianKodeInventarisDisplay', 'pengembalianJumlahBukuDisplay', 'pengembalianTanggalKembaliDisplay'];
 
@@ -716,6 +720,7 @@
         namaInput.value = '';
         nimInput.value = '';
         jurusanInput.value = '';
+        kampusInput.value = '';
         displayIds.forEach(function(id) { document.getElementById(id).value = ''; });
         notif.classList.add('hidden');
         notif.innerHTML = '';
@@ -728,6 +733,7 @@
       namaInput.value = data.nama;
       nimInput.value = data.nim;
       jurusanInput.value = data.jurusan;
+      kampusInput.value = data.kampus || '';
 
       document.getElementById('pengembalianTanggalPinjamDisplay').value = data.tanggalPinjam;
       document.getElementById('pengembalianJudulBukuDisplay').value = data.judulBuku;
@@ -1113,6 +1119,7 @@
             document.getElementById('nama').readOnly = false;
             document.getElementById('nim').readOnly = false;
             document.getElementById('jurusan').disabled = false;
+            document.getElementById('kampus').disabled = false;
             loadDashboardData();
           } else {
             Swal.fire('Error!', 'Gagal menyimpan: ' + response.message, 'error');
