@@ -1012,6 +1012,11 @@
           resetButtonState(btn, btnText, spinner);
           return;
         }
+        // REVISI (FITUR BARU): kirim ID peminjaman terpilih supaya backend bisa
+        // mencocokkan secara presisi (bukan lagi berdasarkan teks), sehingga
+        // nama yang sudah dikembalikan otomatis hilang dari dropdown ini.
+        const dataPeminjamTerpilih = (window.globalDaftarPeminjaman || [])[namaPeminjamDropdown.value];
+        formData.idPeminjaman = dataPeminjamTerpilih ? dataPeminjamTerpilih.id : '';
         formData.pengembalianTanggalPinjam = document.getElementById('pengembalianTanggalPinjamDisplay').value;
         formData.pengembalianJudulBuku = document.getElementById('pengembalianJudulBukuDisplay').value;
         formData.pengembalianPengarangBuku = document.getElementById('pengembalianPengarangDisplay').value;
