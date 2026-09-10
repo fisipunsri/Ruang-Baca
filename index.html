@@ -50,7 +50,7 @@
   <div class="w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
     
     <div class="h-48 sm:h-64 w-full bg-cover bg-center relative" 
-         style="background-image: url('https://lh3.googleusercontent.com/d/1opFtHQPd0OSLfXgzvAaF6PXt0M_q2q26');">
+         style="background-image: url('https://lh3.googleusercontent.com/d/1gw1vbSTP1bCi9oIbYjuFHPBvXzGTE_ha');">
       <div class="absolute inset-0 bg-unsri-navy bg-opacity-70 flex flex-col justify-center items-center text-center p-6">
         
         <img src="https://lh3.googleusercontent.com/d/1y7uSeQTv9gfPLRiTM7yYbW74Cpv6DXJp" alt="Logo Ruang Baca" class="h-24 sm:h-28 w-auto mb-4 drop-shadow-md" referrerpolicy="no-referrer">
@@ -503,13 +503,18 @@
       if (pengalamanAudioDimulai) return;
       pengalamanAudioDimulai = true;
 
-      // Mulai buat & buffer player YouTube dari sekarang (belum diputar) supaya
-      // begitu sapaan suara selesai, musik langsung terdengar tanpa jeda.
+      // REVISI (BUG FIX): musik sekarang langsung diputar DI SINI, di dalam
+      // interaksi klik/sentuhan pengguna yang pertama - bukan lagi menunggu
+      // sapaan suara selesai dulu (lewat callback putarSuara). Menunggu
+      // sapaan suara selesai butuh beberapa detik, dan begitu waktu itu
+      // lewat, browser (terutama Chrome) sudah menganggap izin autoplay dari
+      // klik pengguna tadi kedaluwarsa - sehingga perintah putar musik ke
+      // iframe YouTube ditolak diam-diam tanpa error apa pun, dan musik jadi
+      // terkesan "tidak mau" otomatis berputar.
       cobaBuatPlayerYoutube();
+      mulaiMusik();
 
-      putarSuara('Diucapkan selamat datang bagi pengunjung ruang baca FISIP Unsri', function() {
-        mulaiMusik();
-      });
+      putarSuara('Diucapkan selamat datang bagi pengunjung ruang baca FISIP Unsri');
     }
 
     function toggleMusik() {
