@@ -227,7 +227,7 @@
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-2">Pilih Nama Peminjam <span class="text-red-500">*</span></label>
             <div class="relative">
-              <select id="namaPeminjamDropdown"
+              <select id="namaPeminjamDropdown" required
                       class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-unsri-navy focus:border-unsri-navy transition shadow-sm appearance-none cursor-pointer">
                 <option value="" selected>-- Pilih Nama Peminjam --</option>
               </select>
@@ -525,9 +525,11 @@
         return;
       }
       if (ytPlayer.getPlayerState() === YT.PlayerState.PLAYING) {
+        musikBolehDiputar = false;
         ytPlayer.pauseVideo();
         updateIconMusik(false);
       } else {
+        musikBolehDiputar = true;
         ytPlayer.playVideo();
         updateIconMusik(true);
       }
@@ -542,20 +544,26 @@
       });
     }
 
-    // REVISI (PERBAIKAN): Browser (Chrome/Safari/dll) memblokir audio
-    // bersuara otomatis tanpa interaksi pengguna sama sekali di halaman -
-    // ini kebijakan platform browser, bukan hal yang bisa dilewati lewat
-    // kode. Sebelumnya fallback ini tidak benar-benar memutar musik karena
-    // mulaiPengalamanAudio() sudah dianggap "selesai" oleh percobaan
-    // otomatis saat load, sehingga klik berikutnya cuma di-skip. Sekarang:
-    // sentuhan/klik/tombol keyboard PERTAMA di mana saja pada halaman akan
-    // langsung memutar musik (bukan cuma lewat tombol ikon musik).
-    let audioSudahDibuka = false;
+    function musikSedangDiputar() {
+      return !!(ytPlayer && ytPlayerSiap && typeof ytPlayer.getPlayerState === 'function' && ytPlayer.getPlayerState() === YT.PlayerState.PLAYING);
+    }
+
+    // REVISI (BUG FIX): Sebelumnya listener ini hanya jalan SEKALI ({ once:
+    // true }) untuk klik/sentuhan/keyboard pertama di halaman. Masalahnya,
+    // klik pertama sering terjadi SEBELUM data ID musik (musikYoutubeIdAktif)
+    // selesai dimuat dari server lewat fetch getDashboardData - sehingga
+    // percobaan pertama itu gagal total, dan karena listener sudah "dipakai
+    // habis", klik-klik berikutnya di kolom form lain tidak pernah mencoba
+    // memutar musik lagi. Sekarang listener TETAP aktif dan akan terus
+    // mencoba di setiap interaksi berikutnya, sampai musik benar-benar
+    // berhasil berputar - tapi tidak akan memaksa nyala lagi kalau musik
+    // sengaja di-pause manual lewat tombol (lihat musikBolehDiputar di atas).
     function bukaKunciAudioOtomatis() {
-      if (audioSudahDibuka) return;
-      audioSudahDibuka = true;
+      if (musikSedangDiputar()) return;
+      if (pengalamanAudioDimulai && !musikBolehDiputar) return;
 
       if (!pengalamanAudioDimulai) {
+        musikBolehDiputar = true;
         mulaiPengalamanAudio();
       } else if (musikYoutubeIdAktif) {
         musikBolehDiputar = true;
@@ -567,7 +575,7 @@
       }
     }
     ['click', 'touchstart', 'keydown'].forEach(function(evt) {
-      document.addEventListener(evt, bukaKunciAudioOtomatis, { once: true, passive: true });
+      document.addEventListener(evt, bukaKunciAudioOtomatis, { passive: true });
     });
 
     function updateClock() {
