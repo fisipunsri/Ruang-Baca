@@ -882,6 +882,20 @@
       renderNamaDropdown(this.value);
     });
 
+    // REVISI (BUG FIX): sebelumnya dropdown HANYA ditutup lewat listener klik di
+    // "document" (di bawah). Itu tidak terpicu kalau pengunjung pindah dari kolom
+    // Nama Lengkap ke kolom berikutnya pakai tombol Tab atau langsung tap ke kolom
+    // lain, sehingga dropdown bisa tetap terbuka dan "melayang" menutupi kolom
+    // NIM/Jurusan di bawahnya - akibatnya ketikan/tap pengunjung baru (yang
+    // namanya belum ada di daftar) bisa salah masuk kolom, dan Nama Lengkap
+    // jadi terlihat kosong lagi saat "Simpan Kunjungan" diklik. Sekarang dropdown
+    // otomatis ditutup begitu kolom Nama Lengkap kehilangan fokus. Diberi jeda
+    // singkat supaya klik pada salah satu saran nama tetap sempat diproses dulu
+    // sebelum dropdown disembunyikan.
+    document.getElementById('nama').addEventListener('blur', function() {
+      setTimeout(sembunyikanDropdownNama, 150);
+    });
+
     document.addEventListener('click', function(e) {
       const wrapper = document.getElementById('namaDropdownWrapper');
       if (wrapper && !wrapper.contains(e.target)) {
