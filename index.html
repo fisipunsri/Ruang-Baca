@@ -89,8 +89,12 @@
 
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">Nama Lengkap</label>
-          <input type="text" id="nama" name="nama" required placeholder="Masukkan nama lengkap"
-                 class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-unsri-navy focus:border-unsri-navy transition shadow-sm placeholder-gray-400">
+          <div id="namaDropdownWrapper" class="relative">
+            <input type="text" id="nama" name="nama" required autocomplete="off" placeholder="Ketik nama Anda untuk mencari, atau isi manual jika pengunjung baru"
+                   class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-unsri-navy focus:border-unsri-navy transition shadow-sm placeholder-gray-400">
+            <div id="namaDropdownList" class="hidden absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-52 overflow-y-auto"></div>
+          </div>
+          <p class="text-xs text-gray-500 mt-2"><i class="fa-solid fa-circle-info mr-1"></i> Jika nama Anda sudah pernah berkunjung, pilih dari daftar agar NIM, Jurusan, dan Kampus otomatis terisi. Jika belum pernah, ketik nama lengkap Anda lalu lanjutkan isi data di bawah secara manual.</p>
         </div>
 
         <div>
@@ -227,7 +231,7 @@
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-2">Pilih Nama Peminjam <span class="text-red-500">*</span></label>
             <div class="relative">
-              <select id="namaPeminjamDropdown"
+              <select id="namaPeminjamDropdown" required
                       class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-unsri-navy focus:border-unsri-navy transition shadow-sm appearance-none cursor-pointer">
                 <option value="" selected>-- Pilih Nama Peminjam --</option>
               </select>
@@ -385,6 +389,13 @@
     // REVISI (FITUR BARU): Variabel global untuk menampung daftar peminjaman buku
     // yang belum dikembalikan (dipakai untuk dropdown "Nama" pada form Pengembalian Buku)
     window.globalDaftarPeminjaman = [];
+
+    // REVISI (FITUR BARU): Variabel global untuk menampung daftar nama mahasiswa yang
+    // pernah berkunjung (dipakai untuk dropdown pencarian "Nama Lengkap" di form kunjungan).
+    // namaDipilihDariDaftar menandai apakah nama saat ini berasal dari klik dropdown
+    // tersebut (true) atau diketik manual oleh pengunjung baru (false).
+    window.globalDaftarMahasiswa = [];
+    let namaDipilihDariDaftar = false;
 
     // ==========================================
     // REVISI (FITUR BARU): Sapaan suara & musik latar dari YouTube
@@ -645,6 +656,14 @@
       jurusanInput.disabled = false;
       kampusInput.disabled = false;
 
+      // REVISI (FITUR BARU): jika nama sudah dipilih dari daftar dropdown,
+      // tetap kunci NIM/Jurusan/Kampus walau Tujuan Kunjungan diganti-ganti.
+      if (namaDipilihDariDaftar) {
+        nimInput.readOnly = true;
+        jurusanInput.disabled = true;
+        kampusInput.disabled = true;
+      }
+
       if (this.value === 'Penyerahan Skripsi') {
         containerFile.classList.remove('hidden');
         fileInput.required = true; 
@@ -662,13 +681,16 @@
         containerPengembalian.classList.remove('hidden');
         initSignaturePad('signatureKembaliCanvas');
         isiDropdownPeminjamBuku();
-        document.getElementById('namaPeminjamDropdown').required = true;
         namaInput.required = false;
         namaInput.readOnly = true;
         nimInput.required = false;
         nimInput.readOnly = true;
         jurusanInput.disabled = true;
         kampusInput.disabled = true;
+        // REVISI (FITUR BARU): form Pengembalian Buku punya dropdown & mekanisme
+        // pengisian nama sendiri (namaPeminjamDropdown), jadi tandai nama TIDAK
+        // sedang berasal dari dropdown pencarian "Nama Lengkap".
+        namaDipilihDariDaftar = false;
       }
     });
 
@@ -683,7 +705,7 @@
 
     function resetPengembalianBukuFields() {
       const dropdown = document.getElementById('namaPeminjamDropdown');
-      if (dropdown) { dropdown.value = ''; dropdown.required = false; }
+      if (dropdown) dropdown.value = '';
       ['pengembalianTanggalPinjamDisplay', 'pengembalianJudulBukuDisplay', 'pengembalianPengarangDisplay', 'pengembalianKodeInventarisDisplay', 'pengembalianJumlahBukuDisplay', 'pengembalianTanggalKembaliDisplay'].forEach(function(id) {
         const el = document.getElementById(id);
         if (el) el.value = '';
@@ -772,6 +794,100 @@
         notif.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i> Pengembalian tepat waktu.';
       }
     }
+
+    // REVISI (FITUR BARU): dropdown pencarian "Nama Lengkap" berdasarkan nama-nama
+    // mahasiswa yang pernah berkunjung (diambil dari sheet Data_Kunjungan lewat
+    // getDashboardData -> daftarMahasiswa). Nama yang sama hanya muncul sekali, dan
+    // pencarian tidak peduli huruf besar/kecil. Saat nama diklik dari daftar, NIM,
+    // Jurusan, dan Kampus otomatis terisi & dikunci. Mahasiswa yang namanya belum
+    // ada di daftar (belum pernah berkunjung) tetap bisa mengetik nama barunya dan
+    // melanjutkan mengisi NIM/Jurusan/Kampus secara manual seperti biasa; nama
+    // tersebut otomatis akan muncul di daftar ini pada kunjungan berikutnya.
+    function renderNamaDropdown(filterText) {
+      const listEl = document.getElementById('namaDropdownList');
+      const daftar = window.globalDaftarMahasiswa || [];
+      const filterLower = (filterText || '').trim().toLowerCase();
+
+      const hasil = filterLower
+        ? daftar.filter(function(m) { return m.nama.toLowerCase().indexOf(filterLower) !== -1; })
+        : daftar;
+
+      if (hasil.length === 0) {
+        listEl.innerHTML = '<div class="px-4 py-3 text-xs text-gray-400 italic">Nama tidak ditemukan. Jika Anda pengunjung baru, lanjutkan isi data di bawah secara manual.</div>';
+      } else {
+        listEl.innerHTML = hasil.map(function(m) {
+          const idxAsli = daftar.indexOf(m);
+          return '<div class="px-4 py-2.5 hover:bg-blue-50 cursor-pointer text-sm text-gray-700 border-b border-gray-50 last:border-0" data-idx="' + idxAsli + '">' + m.nama + '</div>';
+        }).join('');
+      }
+      listEl.classList.remove('hidden');
+    }
+
+    function sembunyikanDropdownNama() {
+      const listEl = document.getElementById('namaDropdownList');
+      if (listEl) listEl.classList.add('hidden');
+    }
+
+    function pilihNamaMahasiswa(data) {
+      const namaInput = document.getElementById('nama');
+      const nimInput = document.getElementById('nim');
+      const jurusanInput = document.getElementById('jurusan');
+      const kampusInput = document.getElementById('kampus');
+
+      namaInput.value = data.nama;
+      nimInput.value = data.nim;
+      jurusanInput.value = data.jurusan;
+      kampusInput.value = data.kampus;
+
+      nimInput.readOnly = true;
+      jurusanInput.disabled = true;
+      kampusInput.disabled = true;
+
+      namaDipilihDariDaftar = true;
+      sembunyikanDropdownNama();
+    }
+
+    document.getElementById('namaDropdownList').addEventListener('click', function(e) {
+      const target = e.target.closest('[data-idx]');
+      if (!target) return;
+      const idx = parseInt(target.getAttribute('data-idx'), 10);
+      const data = (window.globalDaftarMahasiswa || [])[idx];
+      if (!data) return;
+      pilihNamaMahasiswa(data);
+    });
+
+    document.getElementById('nama').addEventListener('focus', function() {
+      if (this.readOnly) return;
+      renderNamaDropdown(this.value);
+    });
+
+    document.getElementById('nama').addEventListener('input', function() {
+      if (this.readOnly) return;
+
+      if (namaDipilihDariDaftar) {
+        // Nama diedit lagi setelah sebelumnya dipilih dari daftar -> buka kunci
+        // kembali NIM/Jurusan/Kampus supaya bisa diisi manual (dianggap data baru).
+        namaDipilihDariDaftar = false;
+        const nimInput = document.getElementById('nim');
+        const jurusanInput = document.getElementById('jurusan');
+        const kampusInput = document.getElementById('kampus');
+        nimInput.readOnly = false;
+        nimInput.value = '';
+        jurusanInput.disabled = false;
+        jurusanInput.value = '';
+        kampusInput.disabled = false;
+        kampusInput.value = '';
+      }
+
+      renderNamaDropdown(this.value);
+    });
+
+    document.addEventListener('click', function(e) {
+      const wrapper = document.getElementById('namaDropdownWrapper');
+      if (wrapper && !wrapper.contains(e.target)) {
+        sembunyikanDropdownNama();
+      }
+    });
 
     // REVISI (FITUR BARU): Signature pad (tanda tangan) untuk Peminjaman & Pengembalian Buku
     const signaturePads = {};
@@ -1121,6 +1237,8 @@
             document.getElementById('nim').readOnly = false;
             document.getElementById('jurusan').disabled = false;
             document.getElementById('kampus').disabled = false;
+            namaDipilihDariDaftar = false;
+            sembunyikanDropdownNama();
             loadDashboardData();
           } else {
             Swal.fire('Error!', 'Gagal menyimpan: ' + response.message, 'error');
@@ -1153,6 +1271,7 @@
 
           window.globalRiwayat = data.riwayat || [];
           window.globalDaftarPeminjaman = data.daftarPeminjamanBuku || [];
+          window.globalDaftarMahasiswa = data.daftarMahasiswa || [];
 
           // REVISI (BUG FIX - HP): ID video YouTube dari spreadsheet (sheet
           // "Pengaturan", baris "MusikYoutubeID") disimpan di sini, TAPI
