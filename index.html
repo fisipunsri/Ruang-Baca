@@ -1071,20 +1071,45 @@
       e.preventDefault();
       
       const nimVal = document.getElementById('nim').value.trim();
+      const keteranganVal = document.getElementById('keterangan').value;
 
       // REVISI (BUG FIX): Validasi proteksi input ganda berdasarkan NIM yang
       // sama kini dibatasi PER HARI (memakai tanggal zona waktu Asia/Jakarta),
       // sehingga NIM yang sama TIDAK diblokir lagi di hari yang berbeda.
-      // Dalam satu hari yang sama, NIM yang sama boleh input maksimal 2 kali;
-      // percobaan input yang ketiga di hari yang sama akan ditolak.
+      // Dalam satu hari yang sama, NIM yang sama boleh input maksimal 2 kali,
+      // TAPI kedua kunjungan itu wajib punya Tujuan Kunjungan ("keterangan")
+      // yang BERBEDA - kunjungan dengan tujuan yang SAMA pada hari yang sama
+      // dianggap kunjungan ganda dan ditolak, walaupun baru percobaan
+      // pertama/kedua hari itu. Jika tujuannya berbeda, tetap boleh disimpan
+      // pada hari yang sama, sampai maksimal 2 kali.
+      //
+      // Catatan: pengecekan di sini hanya peringatan dini di frontend
+      // (memakai data riwayat yang tersedia di browser). Validasi yang
+      // SEBENARNYA menentukan (dan tidak bisa dilewati walau data di browser
+      // belum sinkron/lengkap) tetap dilakukan di backend - lihat fungsi
+      // cekBatasKunjunganHarian() di Code.gs.
       const todayStr = getTodayDateStrJakarta();
-      const kunjunganHariIni = window.globalRiwayat
+      const kunjunganNimHariIni = window.globalRiwayat
         ? window.globalRiwayat.filter(function(row) {
             return String(row.nim).trim() === nimVal && String(row.waktu).trim().indexOf(todayStr) === 0;
-          }).length
-        : 0;
+          })
+        : [];
 
-      if (kunjunganHariIni >= 2) {
+      const sudahAdaKeteranganSama = kunjunganNimHariIni.some(function(row) {
+        return String(row.keterangan).trim() === keteranganVal;
+      });
+
+      if (sudahAdaKeteranganSama) {
+        Swal.fire({
+          title: 'Peringatan!',
+          text: 'Anda sudah mencatat kunjungan dengan tujuan "' + keteranganVal + '" hari ini. Silakan pilih tujuan kunjungan yang berbeda, atau coba lagi besok.',
+          icon: 'warning',
+          confirmButtonColor: '#1e3a8a'
+        });
+        return;
+      }
+
+      if (kunjunganNimHariIni.length >= 2) {
         Swal.fire({
           title: 'Peringatan!',
           text: 'User dengan NIM tersebut sudah menginput kunjungan sebanyak 2 kali hari ini, sehingga tidak bisa input untuk ketiga kalinya hari ini. Silakan coba lagi besok.',
@@ -1103,7 +1128,6 @@
       btnText.innerText = 'Menyimpan...';
       spinner.classList.remove('hidden');
 
-      const keteranganVal = document.getElementById('keterangan').value;
       const fileInput = document.getElementById('fileSkripsi');
       const judulVal = document.getElementById('judulSkripsi') ? document.getElementById('judulSkripsi').value : ""; 
       const jumlahBukuVal = document.getElementById('jumlahBuku') ? document.getElementById('jumlahBuku').value : "";
