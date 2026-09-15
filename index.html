@@ -1324,6 +1324,24 @@
           if (data.musikYoutubeId) {
             musikYoutubeIdAktif = data.musikYoutubeId;
 
+            // REVISI (BUG FIX): player YouTube-nya langsung disiapkan
+            // (dibuat & dibiarkan buffering di latar belakang) DI SINI, begitu
+            // ID musik selesai dimuat dari server - bukan lagi ditunda sampai
+            // pengunjung berinteraksi pertama kali. Sebelumnya, player baru
+            // mulai dibuat TEPAT saat sapaan suara juga mulai diucapkan,
+            // padahal iframe YouTube butuh waktu beberapa detik untuk siap
+            // sebelum benar-benar bisa memutar suara - sehingga begitu player
+            // akhirnya siap, sapaan suara (yang mulai hampir seketika) sudah
+            // lebih dulu selesai, dan musik terasa telat/tidak berbarengan
+            // dengan sapaan. Dengan disiapkan lebih awal (sambil pengunjung
+            // masih mengisi formulir), player biasanya sudah siap sebelum
+            // interaksi pertama terjadi, sehingga musik & sapaan bisa mulai
+            // hampir bersamaan. Pemanggilan ini aman dari kebijakan autoplay
+            // browser karena hanya MENYIAPKAN player (belum memerintahkan
+            // putar) - perintah putar sesungguhnya tetap menunggu interaksi
+            // pengguna (lihat mulaiMusik/onReady).
+            cobaBuatPlayerYoutube();
+
             // Kasus balapan (race condition): pengguna sudah lebih dulu
             // berinteraksi dengan halaman sebelum ID musik ini selesai
             // dimuat dari server, jadi musiknya belum sempat diputar saat
