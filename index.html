@@ -1776,18 +1776,24 @@
 
         <div id="kartuCetakArea" class="mx-auto max-w-md space-y-4">
           <div class="rounded-2xl shadow-xl overflow-hidden relative aspect-[1.586/1]" style="background: linear-gradient(135deg, #831843 0%, #be185d 55%, #ec4899 100%);">
-            <!-- REVISI (FITUR BARU): foto gedung ditata ulang menjadi panel besar
-                 bertepi miring di pojok kanan atas (mengikuti tata letak gambar
-                 referensi), warna latar/teks tidak diubah sama sekali. -->
-            <div class="absolute top-0 right-0 h-[52%] w-[46%] sm:w-[42%] overflow-hidden" style="clip-path: polygon(18% 0, 100% 0, 100% 100%, 0 100%);">
+            <!-- REVISI (FITUR BARU): foto gedung dirombak jadi strip elegan yang
+                 membentang penuh tinggi kartu di sisi kanan, dengan tepi melengkung
+                 halus + aksen garis tipis (lapisan putih transparan di belakang foto,
+                 disingkap sedikit di tepi diagonal) dan overlay gradasi supaya foto
+                 menyatu rapi dengan latar - bukan lagi kotak melayang di pojok. -->
+            <div class="absolute inset-y-0 right-0 w-[40%] sm:w-[36%]" style="clip-path: polygon(18% 0, 100% 0, 100% 100%, 0% 100%); background: rgba(255,255,255,0.55);"></div>
+            <div class="absolute inset-y-0 right-0 w-[40%] sm:w-[36%] overflow-hidden" style="clip-path: polygon(20% 0, 100% 0, 100% 100%, 2% 100%);">
               <img src="${KARTU_GEDUNG_DATA_URL}" class="h-full w-full object-cover" />
+              <div class="absolute inset-0" style="background: linear-gradient(90deg, rgba(131,24,67,0.55) 0%, rgba(131,24,67,0) 32%);"></div>
             </div>
 
-            <div class="absolute inset-0 p-4 sm:p-5 flex flex-col text-white">
-              <div class="flex items-start gap-2 min-w-0 pr-[46%] sm:pr-[42%]">
-                <img src="${KARTU_LOGO_URL}" referrerpolicy="no-referrer" class="h-9 w-9 sm:h-10 sm:w-10 object-contain drop-shadow flex-shrink-0" />
+            <div class="relative h-full p-4 sm:p-5 flex flex-col text-white pr-[42%] sm:pr-[38%]">
+              <div class="flex items-center gap-2 min-w-0">
+                <div class="flex-shrink-0 h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-white shadow-md ring-1 ring-black/5 flex items-center justify-center p-1">
+                  <img src="${KARTU_LOGO_URL}" referrerpolicy="no-referrer" class="h-full w-full object-contain" />
+                </div>
                 <div class="leading-tight min-w-0">
-                  <p class="text-[8px] sm:text-[9px] font-semibold tracking-wide">FAKULTAS ILMU SOSIAL DAN ILMU POLITIK</p>
+                  <p class="text-[7px] sm:text-[8px] font-semibold tracking-wide">FAKULTAS ILMU SOSIAL DAN ILMU POLITIK</p>
                   <p class="text-xs sm:text-sm font-extrabold tracking-wide">UNIVERSITAS SRIWIJAYA</p>
                   <p class="text-[8px] sm:text-[9px] italic text-pink-100">Rumah Kita, Rumah Limas</p>
                 </div>
@@ -1804,9 +1810,9 @@
                   <p><span class="inline-block w-16 sm:w-20 font-semibold align-top">Kampus</span>: ${data.kampus}</p>
                 </div>
               </div>
-
-              <p class="text-[8px] sm:text-[9px] text-pink-100 text-right italic mt-1">Membaca, Membuka Dunia</p>
             </div>
+
+            <p class="absolute bottom-3 right-4 sm:right-5 text-[8px] sm:text-[9px] text-white italic" style="text-shadow: 0 1px 3px rgba(0,0,0,0.5);">Membaca, Membuka Dunia</p>
           </div>
 
           <div class="rounded-2xl shadow-xl overflow-hidden bg-white border border-pink-100">
