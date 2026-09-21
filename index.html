@@ -10,6 +10,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <script>
@@ -1766,6 +1768,7 @@
     // "Cetak Kartu Anggota" (window.print(), dibatasi hanya area kartu lewat
     // CSS @media print di atas).
     function tampilkanKartuAnggota(data) {
+      window.kartuAnggotaTerakhir = data; // dipakai untuk nama file PDF
       const wrapper = document.getElementById('hasilKartuAnggota');
       wrapper.classList.remove('hidden');
       wrapper.innerHTML = `
@@ -1834,8 +1837,8 @@
         </div>
 
         <div class="text-center mt-6 print:hidden">
-          <button onclick="cetakKartuAnggota()" class="bg-pink-700 hover:bg-pink-800 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition">
-            <i class="fa-solid fa-print mr-2"></i> Cetak Kartu Anggota
+          <button id="btnUnduhKartu" onclick="unduhKartuAnggotaPDF()" class="bg-pink-700 hover:bg-pink-800 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition">
+            <i class="fa-solid fa-file-pdf mr-2"></i> Unduh PDF
           </button>
         </div>
       `;
@@ -1843,8 +1846,52 @@
       wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    function cetakKartuAnggota() {
-      window.print();
+    async function unduhKartuAnggotaPDF() {
+      const kartuElement = document.getElementById('kartuCetakArea');
+      const btn = document.getElementById('btnUnduhKartu');
+      const teksAsli = btn ? btn.innerHTML : '';
+
+      try {
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Membuat PDF...';
+        }
+
+        const canvas = await html2canvas(kartuElement, {
+          scale: 3,
+          useCORS: true,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+
+        const lebarMM = 190;
+        const tinggiMM = (canvas.height * lebarMM) / canvas.width;
+
+        const pdf = new jsPDF({
+          orientation: tinggiMM > lebarMM ? 'portrait' : 'landscape',
+          unit: 'mm',
+          format: [lebarMM, tinggiMM]
+        });
+
+        pdf.addImage(imgData, 'PNG', 0, 0, lebarMM, tinggiMM);
+
+        const data = window.kartuAnggotaTerakhir;
+        const namaFile = data && data.nim
+          ? 'Kartu_Anggota_RuangBaca_' + data.nim + '.pdf'
+          : 'Kartu_Anggota_RuangBaca.pdf';
+
+        pdf.save(namaFile);
+      } catch (error) {
+        console.error('Gagal membuat PDF:', error);
+        Swal.fire('Error!', 'Gagal membuat file PDF. Silakan coba lagi.', 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = teksAsli;
+        }
+      }
     }
   </script>
 </body>
