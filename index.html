@@ -29,7 +29,7 @@
         }
       }
     }
-  
+  </script>
 
   <style>
     .table-container::-webkit-scrollbar { height: 8px; }
@@ -1763,12 +1763,221 @@
       reader.readAsDataURL(file);
     }
 
-    // REVISI (FITUR BARU): merender Kartu Anggota Ruang Baca (tampak depan &
-    // belakang) memakai data yang baru saja disimpan, lengkap dengan tombol
-    // "Cetak Kartu Anggota" (window.print(), dibatasi hanya area kartu lewat
-    // CSS @media print di atas).
-    function tampilkanKartuAnggota(data) {
+    /* =====================================================================
+       PERBAIKAN KARTU ANGGOTA: LANDSCAPE, TIDAK TERPOTONG, SIAP CETAK
+       ---------------------------------------------------------------------
+       Menggantikan tampilkanKartuAnggota() dan unduhKartuAnggotaPDF() versi lama.
+       ===================================================================== */
+
+    // ---- Pengaturan (boleh diubah) ----
+    const KARTU_LEBAR_MM = 130;  // lebar SATU kartu di kertas A4 landscape (mm). Ukuran kartu ID/KTP asli = 85.6
+    const KARTU_JARAK_MM = 8;    // jarak antara kartu depan dan belakang (mm)
+
+    // ---- Ukuran desain kartu (jangan diubah) ----
+    const KARTU_PX_LEBAR = 1011;
+    const KARTU_PX_TINGGI = 638;
+
+    // ---------------------------------------------------------------------
+    // CSS kartu. Ukuran kartu dikunci (1011 x 638 px) lalu diskalakan, jadi
+    // tampilannya SAMA di HP, laptop, PDF, maupun cetak (tidak lagi bergantung
+    // lebar layar sehingga teks tidak bertabrakan / terpotong).
+    // ---------------------------------------------------------------------
+    function pasangGayaKartu() {
+      if (document.getElementById('gayaKartuAnggota')) return;
+      const st = document.createElement('style');
+      st.id = 'gayaKartuAnggota';
+      st.textContent = `
+    .kartu-viewport{position:relative;width:100%;max-width:448px;margin:0 auto 16px;aspect-ratio:1011/638;overflow:hidden;border-radius:calc(36px * var(--kartu-skala,.3));box-shadow:0 20px 25px -5px rgba(0,0,0,.15),0 8px 10px -6px rgba(0,0,0,.12)}
+    .kartu-viewport:last-child{margin-bottom:0}
+    .kartu-viewport>.kartu-face{position:absolute;top:0;left:0;transform-origin:top left;transform:scale(var(--kartu-skala,.3))}
+    .kartu-face{position:relative;flex:none;width:1011px;height:638px;box-sizing:border-box;overflow:hidden;font-family:'Poppins','Segoe UI',Arial,sans-serif;line-height:1.25;text-align:left}
+
+    .kartu-depan{border-radius:36px;color:#fff;background:linear-gradient(135deg,#831843 0%,#be185d 55%,#ec4899 100%)}
+    .kartu-strip{position:absolute;top:0;right:0;width:364px;height:638px;max-width:none;object-fit:cover;display:block}
+    .kartu-depan-isi{position:absolute;top:0;left:0;bottom:0;width:640px;box-sizing:border-box;padding:40px 0 40px 45px;display:flex;flex-direction:column}
+    .kartu-kop{display:flex;align-items:center;gap:22px}
+    .kartu-logo{flex:none;width:90px;height:90px;box-sizing:border-box;padding:8px;border-radius:50%;background:#fff;box-shadow:0 4px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center}
+    .kartu-logo img{width:100%;height:100%;object-fit:contain;display:block}
+    .kartu-kop-teks{flex:1;min-width:0}
+    .kartu-fakultas{margin:0;font-size:18px;font-weight:600;letter-spacing:.02em}
+    .kartu-univ{margin:2px 0 0;font-size:29px;font-weight:700;letter-spacing:.02em;white-space:nowrap}
+    .kartu-slogan{margin:2px 0 0;font-size:22px;font-style:italic;color:#fce7f3}
+    .kartu-judul{margin-top:14px;text-align:center;line-height:1.1}
+    .kartu-judul-atas{margin:0;font-size:28px;font-weight:700;letter-spacing:.14em}
+    .kartu-judul-bawah{margin:2px 0 0;font-size:46px;font-weight:700;letter-spacing:.04em;color:#fbbf24}
+    .kartu-badan{flex:1;min-height:0;display:flex;align-items:center;gap:34px;margin-top:12px}
+    .kartu-data{flex:1;min-width:0;font-size:26px;line-height:1.3}
+    .kartu-baris{display:flex;margin-top:10px}
+    .kartu-baris:first-child{margin-top:0}
+    .kartu-label{flex:none;width:118px;font-weight:600}
+    .kartu-titik{flex:none;width:16px}
+    .kartu-isi{flex:1;min-width:0;overflow-wrap:anywhere}
+    .kartu-foto{flex:none;width:180px;height:216px;max-width:none;box-sizing:border-box;object-fit:cover;border:5px solid #fff;border-radius:14px;background:rgba(255,255,255,.2);box-shadow:0 6px 12px rgba(0,0,0,.3);display:block}
+    .kartu-motto{position:absolute;right:45px;bottom:26px;margin:0;font-size:21px;font-style:italic;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.55)}
+
+    .kartu-belakang{background:#fff;border:2px solid #fbcfe8;border-radius:36px;color:#374151}
+    .kartu-bel-kepala{background:#831843;padding:26px 45px}
+    .kartu-bel-kepala p{margin:0;font-size:30px;font-weight:700;letter-spacing:.01em;color:#fff}
+    .kartu-bel-isi{padding:32px 45px 0}
+    .kartu-bel-judul{margin:0 0 14px;font-size:28px;font-weight:600;color:#1f2937}
+    .kartu-bel-butir{display:flex;gap:10px;margin-top:8px;font-size:26px;line-height:1.4}
+    .kartu-bel-butir>span:first-child{flex:none;width:34px}
+    .kartu-bel-butir>span:last-child{flex:1;min-width:0}
+
+    /* ===== CETAK: A4 landscape, kartu depan & belakang berdampingan ===== */
+    @page{size:A4 landscape;margin:0}
+    @media print{
+      html,body{height:210mm !important;min-height:0 !important;margin:0 !important;padding:0 !important;overflow:hidden !important;background:#fff !important}
+      #kartuCetakArea{position:absolute;top:calc((210mm - var(--kartu-tinggi-cetak,82mm)) / 2);left:0;width:100%;margin:0;display:flex;justify-content:center;align-items:flex-start;gap:var(--kartu-jarak-cetak,8mm)}
+      #kartuCetakArea .kartu-viewport{--kartu-skala:var(--kartu-skala-cetak,.486) !important;width:var(--kartu-lebar-cetak,130mm);height:var(--kartu-tinggi-cetak,82mm);max-width:none;aspect-ratio:auto;margin:0;box-shadow:none;flex:none}
+      #kartuCetakArea,#kartuCetakArea *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    }
+    `;
+      document.head.appendChild(st);
+    }
+
+    // ---------------------------------------------------------------------
+    // Strip foto gedung dengan tepi miring. Sebelumnya memakai CSS clip-path,
+    // yang TIDAK didukung html2canvas (makanya di PDF tepinya jadi lurus).
+    // Sekarang digambar sekali lewat elemen canvas jadi gambar PNG biasa, sehingga
+    // hasilnya sama persis di layar, PDF, dan cetak.
+    // ---------------------------------------------------------------------
+    let kartuStripPromise = null;
+    function buatStripGedung() {
+      if (kartuStripPromise) return kartuStripPromise;
+      kartuStripPromise = new Promise(function(resolve) {
+        const img = new Image();
+        img.onload = function() {
+          try {
+            const W = Math.round(KARTU_PX_LEBAR * 0.36);
+            const H = KARTU_PX_TINGGI;
+            const c = document.createElement('canvas');
+            c.width = W;
+            c.height = H;
+            const ctx = c.getContext('2d');
+
+            // lapisan putih transparan (aksen garis tipis di tepi miring)
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(W * 0.18, 0); ctx.lineTo(W, 0); ctx.lineTo(W, H); ctx.lineTo(0, H);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fill();
+            ctx.restore();
+
+            // foto gedung (object-fit: cover) + gradasi maroon di tepi kiri
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(W * 0.20, 0); ctx.lineTo(W, 0); ctx.lineTo(W, H); ctx.lineTo(W * 0.02, H);
+            ctx.closePath();
+            ctx.clip();
+            const skala = Math.max(W / img.width, H / img.height);
+            const dw = img.width * skala;
+            const dh = img.height * skala;
+            ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+            const g = ctx.createLinearGradient(0, 0, W * 0.32, 0);
+            g.addColorStop(0, 'rgba(131,24,67,0.55)');
+            g.addColorStop(1, 'rgba(131,24,67,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, W, H);
+            ctx.restore();
+
+            resolve(c.toDataURL('image/png'));
+          } catch (e) {
+            resolve(null);
+          }
+        };
+        img.onerror = function() { resolve(null); };
+        img.src = KARTU_GEDUNG_DATA_URL;
+      });
+      return kartuStripPromise;
+    }
+
+    // ---------------------------------------------------------------------
+    // Template kartu (dipakai untuk tampilan layar DAN untuk ekspor PDF,
+    // jadi dijamin identik).
+    // ---------------------------------------------------------------------
+    function htmlKartuDepan(data, stripUrl) {
+      return `
+        <div class="kartu-face kartu-depan">
+          <img class="kartu-strip" src="${stripUrl}" alt="">
+          <div class="kartu-depan-isi">
+            <div class="kartu-kop">
+              <div class="kartu-logo"><img src="${KARTU_LOGO_URL}" referrerpolicy="no-referrer" alt=""></div>
+              <div class="kartu-kop-teks">
+                <p class="kartu-fakultas">FAKULTAS ILMU SOSIAL DAN ILMU POLITIK</p>
+                <p class="kartu-univ">UNIVERSITAS SRIWIJAYA</p>
+                <p class="kartu-slogan">Rumah Kita, Rumah Limas</p>
+              </div>
+            </div>
+            <div class="kartu-judul">
+              <p class="kartu-judul-atas">KARTU ANGGOTA</p>
+              <p class="kartu-judul-bawah">RUANG BACA</p>
+            </div>
+            <div class="kartu-badan">
+              <div class="kartu-data">
+                <div class="kartu-baris"><span class="kartu-label">Nama</span><span class="kartu-titik">:</span><span class="kartu-isi">${data.nama}</span></div>
+                <div class="kartu-baris"><span class="kartu-label">NIM</span><span class="kartu-titik">:</span><span class="kartu-isi">${data.nim}</span></div>
+                <div class="kartu-baris"><span class="kartu-label">Prodi</span><span class="kartu-titik">:</span><span class="kartu-isi">${data.jurusan}</span></div>
+                <div class="kartu-baris"><span class="kartu-label">Kampus</span><span class="kartu-titik">:</span><span class="kartu-isi">${data.kampus}</span></div>
+              </div>
+              <img class="kartu-foto" src="${data.fotoDataUrl}" alt="">
+            </div>
+          </div>
+          <p class="kartu-motto">Membaca, Membuka Dunia</p>
+        </div>`;
+    }
+
+    function htmlKartuBelakang() {
+      return `
+        <div class="kartu-face kartu-belakang">
+          <div class="kartu-bel-kepala"><p>RUANG BACA FISIP UNIVERSITAS SRIWIJAYA</p></div>
+          <div class="kartu-bel-isi">
+            <p class="kartu-bel-judul">Ketentuan Penggunaan:</p>
+            <div class="kartu-bel-butir"><span>1.</span><span>Kartu ini berlaku sebagai tanda anggota Ruang Baca FISIP Universitas Sriwijaya.</span></div>
+            <div class="kartu-bel-butir"><span>2.</span><span>Harap dibawa setiap kali berkunjung ke Ruang Baca.</span></div>
+            <div class="kartu-bel-butir"><span>3.</span><span>Kartu ini tidak dapat dipindahtangankan.</span></div>
+            <div class="kartu-bel-butir"><span>4.</span><span>Kehilangan atau kerusakan kartu menjadi tanggung jawab pemilik.</span></div>
+            <div class="kartu-bel-butir"><span>5.</span><span>Pelanggaran terhadap ketentuan Ruang Baca dapat dikenakan sanksi sesuai peraturan yang berlaku.</span></div>
+          </div>
+        </div>`;
+    }
+
+    // ---------------------------------------------------------------------
+    // Skala tampilan di layar: kartu 1011 px diperkecil pas selebar wadahnya.
+    // ---------------------------------------------------------------------
+    function hitungSkalaKartu() {
+      document.querySelectorAll('#kartuCetakArea .kartu-viewport').forEach(function(vp) {
+        const lebar = vp.getBoundingClientRect().width;
+        if (lebar > 0) vp.style.setProperty('--kartu-skala', (lebar / KARTU_PX_LEBAR).toFixed(5));
+      });
+    }
+    window.addEventListener('resize', hitungSkalaKartu);
+
+    let kartuPengamatSkala = null;
+    function pasangPengamatSkalaKartu() {
+      if (!('ResizeObserver' in window)) return;
+      if (kartuPengamatSkala) kartuPengamatSkala.disconnect();
+      kartuPengamatSkala = new ResizeObserver(hitungSkalaKartu);
+      document.querySelectorAll('#kartuCetakArea .kartu-viewport').forEach(function(vp) {
+        kartuPengamatSkala.observe(vp);
+      });
+    }
+
+    // ---------------------------------------------------------------------
+    // Menampilkan kartu (menggantikan versi lama)
+    // ---------------------------------------------------------------------
+    async function tampilkanKartuAnggota(data) {
       window.kartuAnggotaTerakhir = data; // dipakai untuk nama file PDF
+      pasangGayaKartu();
+
+      let stripUrl = null;
+      try { stripUrl = await buatStripGedung(); } catch (e) { stripUrl = null; }
+      window.kartuStripUrl = stripUrl || KARTU_GEDUNG_DATA_URL;
+
+      const tinggiCetak = (KARTU_LEBAR_MM * KARTU_PX_TINGGI / KARTU_PX_LEBAR).toFixed(2);
+      const skalaCetak = ((KARTU_LEBAR_MM * 96 / 25.4) / KARTU_PX_LEBAR).toFixed(5);
+
       const wrapper = document.getElementById('hasilKartuAnggota');
       wrapper.classList.remove('hidden');
       wrapper.innerHTML = `
@@ -1777,63 +1986,9 @@
           <p class="text-sm text-gray-500">Kartu anggota Anda sudah bisa dicetak di bawah ini.</p>
         </div>
 
-        <div id="kartuCetakArea" class="mx-auto max-w-md space-y-4">
-          <div class="rounded-2xl shadow-xl overflow-hidden relative aspect-[1.586/1]" style="background: linear-gradient(135deg, #831843 0%, #be185d 55%, #ec4899 100%);">
-            <!-- REVISI (FITUR BARU): foto gedung dirombak jadi strip elegan yang
-                 membentang penuh tinggi kartu di sisi kanan, dengan tepi melengkung
-                 halus + aksen garis tipis (lapisan putih transparan di belakang foto,
-                 disingkap sedikit di tepi diagonal) dan overlay gradasi supaya foto
-                 menyatu rapi dengan latar - bukan lagi kotak melayang di pojok. -->
-            <div class="absolute inset-y-0 right-0 w-[40%] sm:w-[36%]" style="clip-path: polygon(18% 0, 100% 0, 100% 100%, 0% 100%); background: rgba(255,255,255,0.55);"></div>
-            <div class="absolute inset-y-0 right-0 w-[40%] sm:w-[36%] overflow-hidden" style="clip-path: polygon(20% 0, 100% 0, 100% 100%, 2% 100%);">
-              <img src="${KARTU_GEDUNG_DATA_URL}" class="h-full w-full object-cover" />
-              <div class="absolute inset-0" style="background: linear-gradient(90deg, rgba(131,24,67,0.55) 0%, rgba(131,24,67,0) 32%);"></div>
-            </div>
-
-            <div class="relative h-full p-4 sm:p-5 flex flex-col text-white pr-[42%] sm:pr-[38%]">
-              <div class="flex items-center gap-2 min-w-0">
-                <div class="flex-shrink-0 h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-white shadow-md ring-1 ring-black/5 flex items-center justify-center p-1">
-                  <img src="${KARTU_LOGO_URL}" referrerpolicy="no-referrer" class="h-full w-full object-contain" />
-                </div>
-                <div class="leading-tight min-w-0">
-                  <p class="text-[7px] sm:text-[8px] font-semibold tracking-wide">FAKULTAS ILMU SOSIAL DAN ILMU POLITIK</p>
-                  <p class="text-xs sm:text-sm font-extrabold tracking-wide">UNIVERSITAS SRIWIJAYA</p>
-                  <p class="text-[8px] sm:text-[9px] italic text-pink-100">Rumah Kita, Rumah Limas</p>
-                </div>
-              </div>
-
-              <div class="mt-2 leading-tight text-center">
-                <p class="text-xs sm:text-sm font-bold tracking-widest text-white uppercase">Kartu Anggota</p>
-                <p class="text-lg sm:text-xl font-extrabold tracking-wide text-unsri-gold uppercase">Ruang Baca</p>
-              </div>
-
-              <div class="mt-2 flex-1 flex gap-3 sm:gap-4 items-center min-h-0">
-                <div class="text-[10px] sm:text-xs space-y-1 min-w-0">
-                  <div class="flex"><span class="flex-shrink-0 font-semibold w-14">Nama</span><span class="flex-shrink-0 mr-1">:</span><span class="flex-1 min-w-0">${data.nama}</span></div>
-                  <div class="flex"><span class="flex-shrink-0 font-semibold w-14">NIM</span><span class="flex-shrink-0 mr-1">:</span><span class="flex-1 min-w-0">${data.nim}</span></div>
-                  <div class="flex"><span class="flex-shrink-0 font-semibold w-14">Prodi</span><span class="flex-shrink-0 mr-1">:</span><span class="flex-1 min-w-0">${data.jurusan}</span></div>
-                  <div class="flex"><span class="flex-shrink-0 font-semibold w-14">Kampus</span><span class="flex-shrink-0 mr-1">:</span><span class="flex-1 min-w-0">${data.kampus}</span></div>
-                </div>
-                <img src="${data.fotoDataUrl}" class="h-20 w-16 sm:h-24 sm:w-20 object-cover rounded-md border-2 border-white shadow-md bg-white/20 flex-shrink-0" />
-              </div>
-            </div>
-
-            <p class="absolute bottom-3 right-4 sm:right-5 text-[8px] sm:text-[9px] text-white italic" style="text-shadow: 0 1px 3px rgba(0,0,0,0.5);">Membaca, Membuka Dunia</p>
-          </div>
-
-          <div class="rounded-2xl shadow-xl overflow-hidden bg-white border border-pink-100">
-            <div class="px-5 py-3" style="background:#831843;">
-              <p class="text-white text-xs sm:text-sm font-bold">RUANG BACA FISIP UNIVERSITAS SRIWIJAYA</p>
-            </div>
-            <div class="p-5 text-[11px] sm:text-xs text-gray-700 space-y-1.5">
-              <p class="font-semibold text-gray-800 mb-1">Ketentuan Penggunaan:</p>
-              <div class="flex gap-1"><span class="flex-shrink-0">1.</span><span class="flex-1 min-w-0">Kartu ini berlaku sebagai tanda anggota Ruang Baca FISIP Universitas Sriwijaya.</span></div>
-              <div class="flex gap-1"><span class="flex-shrink-0">2.</span><span class="flex-1 min-w-0">Harap dibawa setiap kali berkunjung ke Ruang Baca.</span></div>
-              <div class="flex gap-1"><span class="flex-shrink-0">3.</span><span class="flex-1 min-w-0">Kartu ini tidak dapat dipindahtangankan.</span></div>
-              <div class="flex gap-1"><span class="flex-shrink-0">4.</span><span class="flex-1 min-w-0">Kehilangan atau kerusakan kartu menjadi tanggung jawab pemilik.</span></div>
-              <div class="flex gap-1"><span class="flex-shrink-0">5.</span><span class="flex-1 min-w-0">Pelanggaran terhadap ketentuan Ruang Baca dapat dikenakan sanksi sesuai peraturan yang berlaku.</span></div>
-            </div>
-          </div>
+        <div id="kartuCetakArea" style="--kartu-lebar-cetak:${KARTU_LEBAR_MM}mm;--kartu-tinggi-cetak:${tinggiCetak}mm;--kartu-jarak-cetak:${KARTU_JARAK_MM}mm;--kartu-skala-cetak:${skalaCetak};">
+          <div class="kartu-viewport">${htmlKartuDepan(data, window.kartuStripUrl)}</div>
+          <div class="kartu-viewport">${htmlKartuBelakang()}</div>
         </div>
 
         <div class="text-center mt-6 print:hidden">
@@ -1843,13 +1998,21 @@
         </div>
       `;
 
+      hitungSkalaKartu();
+      pasangPengamatSkalaKartu();
       wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // ---------------------------------------------------------------------
+    // Unduh PDF (menggantikan versi lama): 1 halaman A4 LANDSCAPE, kartu depan
+    // dan belakang berdampingan di tengah halaman. Kartu digambar dari salinan
+    // berukuran asli (1011 x 638 px) di luar layar, bukan dari tampilan HP,
+    // sehingga hasilnya tidak terpotong dan tidak tergantung ukuran layar.
+    // ---------------------------------------------------------------------
     async function unduhKartuAnggotaPDF() {
-      const kartuElement = document.getElementById('kartuCetakArea');
       const btn = document.getElementById('btnUnduhKartu');
       const teksAsli = btn ? btn.innerHTML : '';
+      let stage = null;
 
       try {
         if (btn) {
@@ -1857,28 +2020,48 @@
           btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Membuat PDF...';
         }
 
-        const canvas = await html2canvas(kartuElement, {
-          scale: 3,
-          useCORS: true,
-          backgroundColor: '#ffffff'
-        });
-
-        const imgData = canvas.toDataURL('image/png');
-        const { jsPDF } = window.jspdf;
-
-        const lebarMM = 190;
-        const tinggiMM = (canvas.height * lebarMM) / canvas.width;
-
-        const pdf = new jsPDF({
-          orientation: tinggiMM > lebarMM ? 'portrait' : 'landscape',
-          unit: 'mm',
-          format: [lebarMM, tinggiMM]
-        });
-
-        pdf.addImage(imgData, 'PNG', 0, 0, lebarMM, tinggiMM);
-
         const data = window.kartuAnggotaTerakhir;
-        const namaFile = data && data.nim
+        if (!data) throw new Error('Data kartu tidak ditemukan');
+
+        const jarakPx = Math.round(KARTU_JARAK_MM / KARTU_LEBAR_MM * KARTU_PX_LEBAR);
+        const stripUrl = window.kartuStripUrl || KARTU_GEDUNG_DATA_URL;
+
+        stage = document.createElement('div');
+        stage.id = 'kartuExportStage';
+        stage.style.cssText = 'position:absolute;left:-20000px;top:0;display:flex;gap:' + jarakPx + 'px;background:#ffffff;width:' + (KARTU_PX_LEBAR * 2 + jarakPx) + 'px;height:' + KARTU_PX_TINGGI + 'px;';
+        stage.innerHTML = htmlKartuDepan(data, stripUrl) + htmlKartuBelakang();
+        document.body.appendChild(stage);
+
+        if (document.fonts && document.fonts.ready) await document.fonts.ready;
+
+        const canvas = await html2canvas(stage, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          scrollX: 0,
+          scrollY: 0,
+          onclone: function(doc) {
+            const s = doc.getElementById('kartuExportStage');
+            if (s) { s.style.left = '0px'; s.style.top = '0px'; }
+          }
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const halamanW = pdf.internal.pageSize.getWidth();
+        const halamanH = pdf.internal.pageSize.getHeight();
+
+        // lebar total (2 kartu + jarak) dibandingkan lebar 1 kartu
+        const rasioTotal = (KARTU_PX_LEBAR * 2 + jarakPx) / KARTU_PX_LEBAR;
+        let lebarKartu = KARTU_LEBAR_MM;
+        if (lebarKartu * rasioTotal > halamanW - 20) lebarKartu = (halamanW - 20) / rasioTotal; // sisakan margin 10 mm
+        const totalW = lebarKartu * rasioTotal;
+        const totalH = lebarKartu * KARTU_PX_TINGGI / KARTU_PX_LEBAR;
+
+        pdf.addImage(imgData, 'JPEG', (halamanW - totalW) / 2, (halamanH - totalH) / 2, totalW, totalH);
+
+        const namaFile = data.nim
           ? 'Kartu_Anggota_RuangBaca_' + data.nim + '.pdf'
           : 'Kartu_Anggota_RuangBaca.pdf';
 
@@ -1887,6 +2070,7 @@
         console.error('Gagal membuat PDF:', error);
         Swal.fire('Error!', 'Gagal membuat file PDF. Silakan coba lagi.', 'error');
       } finally {
+        if (stage && stage.parentNode) stage.parentNode.removeChild(stage);
         if (btn) {
           btn.disabled = false;
           btn.innerHTML = teksAsli;
@@ -1894,328 +2078,6 @@
       }
     }
 
-   /* =====================================================================
-       PERBAIKAN KARTU ANGGOTA: LANDSCAPE, TIDAK TERPOTONG, SIAP CETAK
-       ---------------------------------------------------------------------
-       CARA PASANG (1 langkah):
-       Tempel SELURUH isi file ini di dalam blok script paling bawah di
-       index.html, yaitu tepat sebelum penutup script yang TERAKHIR (baris
-       yang berada langsung di atas penutup body).
-       Fungsi tampilkanKartuAnggota() dan unduhKartuAnggotaPDF() yang lama
-       otomatis tertimpa oleh versi di bawah ini (yang lama boleh dihapus
-       kalau mau rapi). Bagian lain di index.html tidak diubah.
-       PERHATIAN: jangan menulis tag html apa pun di dalam komentar file ini,
-       karena browser bisa menganggapnya sebagai penutup script.
-       ===================================================================== */
-
-  // ---- Pengaturan (boleh diubah) ----
-  const KARTU_LEBAR_MM = 130;  // lebar SATU kartu di kertas A4 landscape (mm). Ukuran kartu ID/KTP asli = 85.6
-  const KARTU_JARAK_MM = 8;    // jarak antara kartu depan dan belakang (mm)
-  
-  // ---- Ukuran desain kartu (jangan diubah) ----
-  const KARTU_PX_LEBAR = 1011;
-  const KARTU_PX_TINGGI = 638;
-  
-  // ---------------------------------------------------------------------
-  // CSS kartu. Ukuran kartu dikunci (1011 x 638 px) lalu diskalakan, jadi
-  // tampilannya SAMA di HP, laptop, PDF, maupun cetak (tidak lagi bergantung
-  // lebar layar sehingga teks tidak bertabrakan / terpotong).
-  // ---------------------------------------------------------------------
-  function pasangGayaKartu() {
-    if (document.getElementById('gayaKartuAnggota')) return;
-    const st = document.createElement('style');
-    st.id = 'gayaKartuAnggota';
-    st.textContent = `
-  .kartu-viewport{position:relative;width:100%;max-width:448px;margin:0 auto 16px;aspect-ratio:1011/638;overflow:hidden;border-radius:calc(36px * var(--kartu-skala,.3));box-shadow:0 20px 25px -5px rgba(0,0,0,.15),0 8px 10px -6px rgba(0,0,0,.12)}
-  .kartu-viewport:last-child{margin-bottom:0}
-  .kartu-viewport>.kartu-face{position:absolute;top:0;left:0;transform-origin:top left;transform:scale(var(--kartu-skala,.3))}
-  .kartu-face{position:relative;flex:none;width:1011px;height:638px;box-sizing:border-box;overflow:hidden;font-family:'Poppins','Segoe UI',Arial,sans-serif;line-height:1.25;text-align:left}
-  
-  .kartu-depan{border-radius:36px;color:#fff;background:linear-gradient(135deg,#831843 0%,#be185d 55%,#ec4899 100%)}
-  .kartu-strip{position:absolute;top:0;right:0;width:364px;height:638px;max-width:none;object-fit:cover;display:block}
-  .kartu-depan-isi{position:absolute;top:0;left:0;bottom:0;width:640px;box-sizing:border-box;padding:40px 0 40px 45px;display:flex;flex-direction:column}
-  .kartu-kop{display:flex;align-items:center;gap:22px}
-  .kartu-logo{flex:none;width:90px;height:90px;box-sizing:border-box;padding:8px;border-radius:50%;background:#fff;box-shadow:0 4px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center}
-  .kartu-logo img{width:100%;height:100%;object-fit:contain;display:block}
-  .kartu-kop-teks{flex:1;min-width:0}
-  .kartu-fakultas{margin:0;font-size:18px;font-weight:600;letter-spacing:.02em}
-  .kartu-univ{margin:2px 0 0;font-size:29px;font-weight:700;letter-spacing:.02em;white-space:nowrap}
-  .kartu-slogan{margin:2px 0 0;font-size:22px;font-style:italic;color:#fce7f3}
-  .kartu-judul{margin-top:14px;text-align:center;line-height:1.1}
-  .kartu-judul-atas{margin:0;font-size:28px;font-weight:700;letter-spacing:.14em}
-  .kartu-judul-bawah{margin:2px 0 0;font-size:46px;font-weight:700;letter-spacing:.04em;color:#fbbf24}
-  .kartu-badan{flex:1;min-height:0;display:flex;align-items:center;gap:34px;margin-top:12px}
-  .kartu-data{flex:1;min-width:0;font-size:26px;line-height:1.3}
-  .kartu-baris{display:flex;margin-top:10px}
-  .kartu-baris:first-child{margin-top:0}
-  .kartu-label{flex:none;width:118px;font-weight:600}
-  .kartu-titik{flex:none;width:16px}
-  .kartu-isi{flex:1;min-width:0;overflow-wrap:anywhere}
-  .kartu-foto{flex:none;width:180px;height:216px;max-width:none;box-sizing:border-box;object-fit:cover;border:5px solid #fff;border-radius:14px;background:rgba(255,255,255,.2);box-shadow:0 6px 12px rgba(0,0,0,.3);display:block}
-  .kartu-motto{position:absolute;right:45px;bottom:26px;margin:0;font-size:21px;font-style:italic;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.55)}
-  
-  .kartu-belakang{background:#fff;border:2px solid #fbcfe8;border-radius:36px;color:#374151}
-  .kartu-bel-kepala{background:#831843;padding:26px 45px}
-  .kartu-bel-kepala p{margin:0;font-size:30px;font-weight:700;letter-spacing:.01em;color:#fff}
-  .kartu-bel-isi{padding:32px 45px 0}
-  .kartu-bel-judul{margin:0 0 14px;font-size:28px;font-weight:600;color:#1f2937}
-  .kartu-bel-butir{display:flex;gap:10px;margin-top:8px;font-size:26px;line-height:1.4}
-  .kartu-bel-butir>span:first-child{flex:none;width:34px}
-  .kartu-bel-butir>span:last-child{flex:1;min-width:0}
-  
-  /* ===== CETAK: A4 landscape, kartu depan & belakang berdampingan ===== */
-  @page{size:A4 landscape;margin:0}
-  @media print{
-    html,body{height:210mm !important;min-height:0 !important;margin:0 !important;padding:0 !important;overflow:hidden !important;background:#fff !important}
-    #kartuCetakArea{position:absolute;top:calc((210mm - var(--kartu-tinggi-cetak,82mm)) / 2);left:0;width:100%;margin:0;display:flex;justify-content:center;align-items:flex-start;gap:var(--kartu-jarak-cetak,8mm)}
-    #kartuCetakArea .kartu-viewport{--kartu-skala:var(--kartu-skala-cetak,.486) !important;width:var(--kartu-lebar-cetak,130mm);height:var(--kartu-tinggi-cetak,82mm);max-width:none;aspect-ratio:auto;margin:0;box-shadow:none;flex:none}
-    #kartuCetakArea,#kartuCetakArea *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  }
-  `;
-    document.head.appendChild(st);
-  }
-  
-  // ---------------------------------------------------------------------
-  // Strip foto gedung dengan tepi miring. Sebelumnya memakai CSS clip-path,
-  // yang TIDAK didukung html2canvas (makanya di PDF tepinya jadi lurus).
-  // Sekarang digambar sekali lewat elemen canvas jadi gambar PNG biasa, sehingga
-  // hasilnya sama persis di layar, PDF, dan cetak.
-  // ---------------------------------------------------------------------
-  let kartuStripPromise = null;
-  function buatStripGedung() {
-    if (kartuStripPromise) return kartuStripPromise;
-    kartuStripPromise = new Promise(function(resolve) {
-      const img = new Image();
-      img.onload = function() {
-        try {
-          const W = Math.round(KARTU_PX_LEBAR * 0.36);
-          const H = KARTU_PX_TINGGI;
-          const c = document.createElement('canvas');
-          c.width = W;
-          c.height = H;
-          const ctx = c.getContext('2d');
-  
-          // lapisan putih transparan (aksen garis tipis di tepi miring)
-          ctx.save();
-          ctx.beginPath();
-          ctx.moveTo(W * 0.18, 0); ctx.lineTo(W, 0); ctx.lineTo(W, H); ctx.lineTo(0, H);
-          ctx.closePath();
-          ctx.fillStyle = 'rgba(255,255,255,0.55)';
-          ctx.fill();
-          ctx.restore();
-  
-          // foto gedung (object-fit: cover) + gradasi maroon di tepi kiri
-          ctx.save();
-          ctx.beginPath();
-          ctx.moveTo(W * 0.20, 0); ctx.lineTo(W, 0); ctx.lineTo(W, H); ctx.lineTo(W * 0.02, H);
-          ctx.closePath();
-          ctx.clip();
-          const skala = Math.max(W / img.width, H / img.height);
-          const dw = img.width * skala;
-          const dh = img.height * skala;
-          ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
-          const g = ctx.createLinearGradient(0, 0, W * 0.32, 0);
-          g.addColorStop(0, 'rgba(131,24,67,0.55)');
-          g.addColorStop(1, 'rgba(131,24,67,0)');
-          ctx.fillStyle = g;
-          ctx.fillRect(0, 0, W, H);
-          ctx.restore();
-  
-          resolve(c.toDataURL('image/png'));
-        } catch (e) {
-          resolve(null);
-        }
-      };
-      img.onerror = function() { resolve(null); };
-      img.src = KARTU_GEDUNG_DATA_URL;
-    });
-    return kartuStripPromise;
-  }
-  
-  // ---------------------------------------------------------------------
-  // Template kartu (dipakai untuk tampilan layar DAN untuk ekspor PDF,
-  // jadi dijamin identik).
-  // ---------------------------------------------------------------------
-  function htmlKartuDepan(data, stripUrl) {
-    return `
-      <div class="kartu-face kartu-depan">
-        <img class="kartu-strip" src="${stripUrl}" alt="">
-        <div class="kartu-depan-isi">
-          <div class="kartu-kop">
-            <div class="kartu-logo"><img src="${KARTU_LOGO_URL}" referrerpolicy="no-referrer" alt=""></div>
-            <div class="kartu-kop-teks">
-              <p class="kartu-fakultas">FAKULTAS ILMU SOSIAL DAN ILMU POLITIK</p>
-              <p class="kartu-univ">UNIVERSITAS SRIWIJAYA</p>
-              <p class="kartu-slogan">Rumah Kita, Rumah Limas</p>
-            </div>
-          </div>
-          <div class="kartu-judul">
-            <p class="kartu-judul-atas">KARTU ANGGOTA</p>
-            <p class="kartu-judul-bawah">RUANG BACA</p>
-          </div>
-          <div class="kartu-badan">
-            <div class="kartu-data">
-              <div class="kartu-baris"><span class="kartu-label">Nama</span><span class="kartu-titik">:</span><span class="kartu-isi">${data.nama}</span></div>
-              <div class="kartu-baris"><span class="kartu-label">NIM</span><span class="kartu-titik">:</span><span class="kartu-isi">${data.nim}</span></div>
-              <div class="kartu-baris"><span class="kartu-label">Prodi</span><span class="kartu-titik">:</span><span class="kartu-isi">${data.jurusan}</span></div>
-              <div class="kartu-baris"><span class="kartu-label">Kampus</span><span class="kartu-titik">:</span><span class="kartu-isi">${data.kampus}</span></div>
-            </div>
-            <img class="kartu-foto" src="${data.fotoDataUrl}" alt="">
-          </div>
-        </div>
-        <p class="kartu-motto">Membaca, Membuka Dunia</p>
-      </div>`;
-  }
-  
-  function htmlKartuBelakang() {
-    return `
-      <div class="kartu-face kartu-belakang">
-        <div class="kartu-bel-kepala"><p>RUANG BACA FISIP UNIVERSITAS SRIWIJAYA</p></div>
-        <div class="kartu-bel-isi">
-          <p class="kartu-bel-judul">Ketentuan Penggunaan:</p>
-          <div class="kartu-bel-butir"><span>1.</span><span>Kartu ini berlaku sebagai tanda anggota Ruang Baca FISIP Universitas Sriwijaya.</span></div>
-          <div class="kartu-bel-butir"><span>2.</span><span>Harap dibawa setiap kali berkunjung ke Ruang Baca.</span></div>
-          <div class="kartu-bel-butir"><span>3.</span><span>Kartu ini tidak dapat dipindahtangankan.</span></div>
-          <div class="kartu-bel-butir"><span>4.</span><span>Kehilangan atau kerusakan kartu menjadi tanggung jawab pemilik.</span></div>
-          <div class="kartu-bel-butir"><span>5.</span><span>Pelanggaran terhadap ketentuan Ruang Baca dapat dikenakan sanksi sesuai peraturan yang berlaku.</span></div>
-        </div>
-      </div>`;
-  }
-  
-  // ---------------------------------------------------------------------
-  // Skala tampilan di layar: kartu 1011 px diperkecil pas selebar wadahnya.
-  // ---------------------------------------------------------------------
-  function hitungSkalaKartu() {
-    document.querySelectorAll('#kartuCetakArea .kartu-viewport').forEach(function(vp) {
-      const lebar = vp.getBoundingClientRect().width;
-      if (lebar > 0) vp.style.setProperty('--kartu-skala', (lebar / KARTU_PX_LEBAR).toFixed(5));
-    });
-  }
-  window.addEventListener('resize', hitungSkalaKartu);
-  
-  let kartuPengamatSkala = null;
-  function pasangPengamatSkalaKartu() {
-    if (!('ResizeObserver' in window)) return;
-    if (kartuPengamatSkala) kartuPengamatSkala.disconnect();
-    kartuPengamatSkala = new ResizeObserver(hitungSkalaKartu);
-    document.querySelectorAll('#kartuCetakArea .kartu-viewport').forEach(function(vp) {
-      kartuPengamatSkala.observe(vp);
-    });
-  }
-  
-  // ---------------------------------------------------------------------
-  // Menampilkan kartu (menggantikan versi lama)
-  // ---------------------------------------------------------------------
-  async function tampilkanKartuAnggota(data) {
-    window.kartuAnggotaTerakhir = data; // dipakai untuk nama file PDF
-    pasangGayaKartu();
-  
-    let stripUrl = null;
-    try { stripUrl = await buatStripGedung(); } catch (e) { stripUrl = null; }
-    window.kartuStripUrl = stripUrl || KARTU_GEDUNG_DATA_URL;
-  
-    const tinggiCetak = (KARTU_LEBAR_MM * KARTU_PX_TINGGI / KARTU_PX_LEBAR).toFixed(2);
-    const skalaCetak = ((KARTU_LEBAR_MM * 96 / 25.4) / KARTU_PX_LEBAR).toFixed(5);
-  
-    const wrapper = document.getElementById('hasilKartuAnggota');
-    wrapper.classList.remove('hidden');
-    wrapper.innerHTML = `
-      <div class="text-center mb-5 print:hidden">
-        <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-circle-check text-green-500 mr-2"></i>Kartu Anggota Berhasil Dibuat!</h3>
-        <p class="text-sm text-gray-500">Kartu anggota Anda sudah bisa dicetak di bawah ini.</p>
-      </div>
-  
-      <div id="kartuCetakArea" style="--kartu-lebar-cetak:${KARTU_LEBAR_MM}mm;--kartu-tinggi-cetak:${tinggiCetak}mm;--kartu-jarak-cetak:${KARTU_JARAK_MM}mm;--kartu-skala-cetak:${skalaCetak};">
-        <div class="kartu-viewport">${htmlKartuDepan(data, window.kartuStripUrl)}</div>
-        <div class="kartu-viewport">${htmlKartuBelakang()}</div>
-      </div>
-  
-      <div class="text-center mt-6 print:hidden">
-        <button id="btnUnduhKartu" onclick="unduhKartuAnggotaPDF()" class="bg-pink-700 hover:bg-pink-800 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition">
-          <i class="fa-solid fa-file-pdf mr-2"></i> Unduh PDF
-        </button>
-      </div>
-    `;
-  
-    hitungSkalaKartu();
-    pasangPengamatSkalaKartu();
-    wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-  
-  // ---------------------------------------------------------------------
-  // Unduh PDF (menggantikan versi lama): 1 halaman A4 LANDSCAPE, kartu depan
-  // dan belakang berdampingan di tengah halaman. Kartu digambar dari salinan
-  // berukuran asli (1011 x 638 px) di luar layar, bukan dari tampilan HP,
-  // sehingga hasilnya tidak terpotong dan tidak tergantung ukuran layar.
-  // ---------------------------------------------------------------------
-  async function unduhKartuAnggotaPDF() {
-    const btn = document.getElementById('btnUnduhKartu');
-    const teksAsli = btn ? btn.innerHTML : '';
-    let stage = null;
-  
-    try {
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Membuat PDF...';
-      }
-  
-      const data = window.kartuAnggotaTerakhir;
-      if (!data) throw new Error('Data kartu tidak ditemukan');
-  
-      const jarakPx = Math.round(KARTU_JARAK_MM / KARTU_LEBAR_MM * KARTU_PX_LEBAR);
-      const stripUrl = window.kartuStripUrl || KARTU_GEDUNG_DATA_URL;
-  
-      stage = document.createElement('div');
-      stage.id = 'kartuExportStage';
-      stage.style.cssText = 'position:absolute;left:-20000px;top:0;display:flex;gap:' + jarakPx + 'px;background:#ffffff;width:' + (KARTU_PX_LEBAR * 2 + jarakPx) + 'px;height:' + KARTU_PX_TINGGI + 'px;';
-      stage.innerHTML = htmlKartuDepan(data, stripUrl) + htmlKartuBelakang();
-      document.body.appendChild(stage);
-  
-      if (document.fonts && document.fonts.ready) await document.fonts.ready;
-  
-      const canvas = await html2canvas(stage, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        scrollX: 0,
-        scrollY: 0,
-        onclone: function(doc) {
-          const s = doc.getElementById('kartuExportStage');
-          if (s) { s.style.left = '0px'; s.style.top = '0px'; }
-        }
-      });
-  
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const halamanW = pdf.internal.pageSize.getWidth();
-      const halamanH = pdf.internal.pageSize.getHeight();
-  
-      // lebar total (2 kartu + jarak) dibandingkan lebar 1 kartu
-      const rasioTotal = (KARTU_PX_LEBAR * 2 + jarakPx) / KARTU_PX_LEBAR;
-      let lebarKartu = KARTU_LEBAR_MM;
-      if (lebarKartu * rasioTotal > halamanW - 20) lebarKartu = (halamanW - 20) / rasioTotal; // sisakan margin 10 mm
-      const totalW = lebarKartu * rasioTotal;
-      const totalH = lebarKartu * KARTU_PX_TINGGI / KARTU_PX_LEBAR;
-  
-      pdf.addImage(imgData, 'JPEG', (halamanW - totalW) / 2, (halamanH - totalH) / 2, totalW, totalH);
-  
-      const namaFile = data.nim
-        ? 'Kartu_Anggota_RuangBaca_' + data.nim + '.pdf'
-        : 'Kartu_Anggota_RuangBaca.pdf';
-  
-      pdf.save(namaFile);
-    } catch (error) {
-      console.error('Gagal membuat PDF:', error);
-      Swal.fire('Error!', 'Gagal membuat file PDF. Silakan coba lagi.', 'error');
-    } finally {
-      if (stage && stage.parentNode) stage.parentNode.removeChild(stage);
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = teksAsli;
-      }
-    }
-  } 
   </script>
 </body>
 </html>
