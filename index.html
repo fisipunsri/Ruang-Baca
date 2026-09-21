@@ -108,7 +108,7 @@
                    class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-unsri-navy focus:border-unsri-navy transition shadow-sm placeholder-gray-400">
             <div id="namaDropdownList" class="hidden absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-52 overflow-y-auto"></div>
           </div>
-          <p class="text-xs text-gray-500 mt-2"><i class="fa-solid fa-circle-info mr-1"></i> Jika nama Anda sudah pernah berkunjung, pilih dari daftar agar NIM, Jurusan, dan Kampus otomatis terisi. Jika belum pernah, ketik nama lengkap Anda lalu lanjutkan isi data di bawah secara manual.</p>
+          <p class="text-xs text-gray-500 mt-2"><i class="fa-solid fa-circle-info mr-1"></i> Jika nama Anda sudah pernah berkunjung, pilih dari daftar agar NIM, Departemen, dan Kampus otomatis terisi. Jika belum pernah, ketik nama lengkap Anda lalu lanjutkan isi data di bawah secara manual.</p>
         </div>
 
         <div>
@@ -373,7 +373,7 @@
           </div>
           
           <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <p class="text-sm text-gray-500 font-semibold uppercase tracking-wider mb-3">Distribusi Jurusan</p>
+            <p class="text-sm text-gray-500 font-semibold uppercase tracking-wider mb-3">Distribusi Departemen</p>
             <div class="space-y-2" id="statJurusanContainer">
               <div class="text-center text-gray-400 text-xs py-2 italic">Memuat data statistik...</div>
             </div>
@@ -391,7 +391,7 @@
                   <th class="px-6 py-4 font-semibold min-w-[140px]">Timestamp</th>
                   <th class="px-6 py-4 font-semibold min-w-[150px]">Nama Lengkap</th>
                   <th class="px-6 py-4 font-semibold min-w-[120px]">NIM</th>
-                  <th class="px-6 py-4 font-semibold min-w-[160px]">Jurusan</th>
+                  <th class="px-6 py-4 font-semibold min-w-[160px]">Departemen</th>
                   <th class="px-6 py-4 font-semibold min-w-[130px]">Kampus</th> 
                   <th class="px-6 py-4 font-semibold min-w-[140px]">Keterangan</th>
                   <th class="px-6 py-4 font-semibold min-w-[200px]">Judul Skripsi</th>
@@ -494,7 +494,7 @@
     // REVISI (FITUR BARU): Variabel global untuk fitur Kartu Anggota Ruang Baca.
     // globalDaftarKartuAnggotaNim menampung NIM yang sudah pernah membuat kartu
     // (dipakai untuk validasi dini di frontend). namaKartuTerpilih menampung data
-    // mahasiswa (nama/nim/jurusan/kampus) yang dipilih dari dropdown pencarian nama
+    // mahasiswa (nama/nim/departemen/kampus) yang dipilih dari dropdown pencarian nama
     // pada form Kartu Anggota.
     window.globalDaftarKartuAnggotaNim = [];
     let namaKartuTerpilih = null;
@@ -770,7 +770,7 @@
       kampusInput.disabled = false;
 
       // REVISI (FITUR BARU): jika nama sudah dipilih dari daftar dropdown,
-      // tetap kunci NIM/Jurusan/Kampus walau Tujuan Kunjungan diganti-ganti.
+      // tetap kunci NIM/Departemen/Kampus walau Tujuan Kunjungan diganti-ganti.
       if (namaDipilihDariDaftar) {
         nimInput.readOnly = true;
         jurusanInput.disabled = true;
@@ -916,9 +916,9 @@
     // mahasiswa yang pernah berkunjung (diambil dari sheet Data_Kunjungan lewat
     // getDashboardData -> daftarMahasiswa). Nama yang sama hanya muncul sekali, dan
     // pencarian tidak peduli huruf besar/kecil. Saat nama diklik dari daftar, NIM,
-    // Jurusan, dan Kampus otomatis terisi & dikunci. Mahasiswa yang namanya belum
+    // Departemen, dan Kampus otomatis terisi & dikunci. Mahasiswa yang namanya belum
     // ada di daftar (belum pernah berkunjung) tetap bisa mengetik nama barunya dan
-    // melanjutkan mengisi NIM/Jurusan/Kampus secara manual seperti biasa; nama
+    // melanjutkan mengisi NIM/Departemen/Kampus secara manual seperti biasa; nama
     // tersebut otomatis akan muncul di daftar ini pada kunjungan berikutnya.
     function renderNamaDropdown(filterText) {
       const listEl = document.getElementById('namaDropdownList');
@@ -983,7 +983,7 @@
 
       if (namaDipilihDariDaftar) {
         // Nama diedit lagi setelah sebelumnya dipilih dari daftar -> buka kunci
-        // kembali NIM/Jurusan/Kampus supaya bisa diisi manual (dianggap data baru).
+        // kembali NIM/Departemen/Kampus supaya bisa diisi manual (dianggap data baru).
         namaDipilihDariDaftar = false;
         const nimInput = document.getElementById('nim');
         const jurusanInput = document.getElementById('jurusan');
@@ -1003,7 +1003,7 @@
     // "document" (di bawah). Itu tidak terpicu kalau pengunjung pindah dari kolom
     // Nama Lengkap ke kolom berikutnya pakai tombol Tab atau langsung tap ke kolom
     // lain, sehingga dropdown bisa tetap terbuka dan "melayang" menutupi kolom
-    // NIM/Jurusan di bawahnya - akibatnya ketikan/tap pengunjung baru (yang
+    // NIM/Departemen di bawahnya - akibatnya ketikan/tap pengunjung baru (yang
     // namanya belum ada di daftar) bisa salah masuk kolom, dan Nama Lengkap
     // jadi terlihat kosong lagi saat "Simpan Kunjungan" diklik. Sekarang dropdown
     // otomatis ditutup begitu kolom Nama Lengkap kehilangan fokus. Diberi jeda
@@ -1644,7 +1644,7 @@
 
     document.getElementById('namaKartu').addEventListener('input', function() {
       // Nama diketik ulang -> anggap belum ada pilihan yang valid sampai
-      // pengunjung memilih lagi dari daftar, supaya NIM/Jurusan/Kampus tidak
+      // pengunjung memilih lagi dari daftar, supaya NIM/Departemen/Kampus tidak
       // ikut-ikutan salah menempel ke nama yang berbeda.
       namaKartuTerpilih = null;
       document.getElementById('nimKartu').value = '';
