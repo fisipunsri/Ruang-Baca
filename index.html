@@ -1697,6 +1697,65 @@
     // Kalau nama diketik ulang setelah pratinjau muncul, pratinjau ditutup.
     document.getElementById('namaKartu').addEventListener('input', tutupPreviewKartu);
 
+    // REVISI (PERCEPATAN): hasil pratinjau yang sudah pernah diambil dari server
+    // disimpan sementara (selama halaman ini terbuka), jadi membuka nama yang
+    // sama lagi langsung tampil tanpa menunggu server.
+    const kartuPreviewCache = {};
+
+    // Mengambil data kartu (termasuk foto) dari server. Respons dibaca sebagai
+    // teks dulu lalu di-parse, supaya kalau server membalas halaman error HTML
+    // (bukan JSON), pesan yang muncul ke pengunjung tetap rapi.
+    async function ambilDataKartuDariServer(nim) {
+      const res = await fetch(WEB_APP_URL + '?action=getKartuAnggota&nim=' + encodeURIComponent(nim));
+      const teks = await res.text();
+
+      let json;
+      try {
+        json = JSON.parse(teks);
+      } catch (e) {
+        console.error('Respons getKartuAnggota bukan JSON:', teks.slice(0, 300));
+        throw new Error('Server tidak mengirim data yang valid.');
+      }
+
+      if (!json.success || !json.data) {
+        const err = new Error(json.message || 'Data kartu anggota tidak ditemukan.');
+        err.kartuBelumAda = (json.kode === 'BELUM_ADA');
+        throw err;
+      }
+      return json.data;
+    }
+
+    // Menggambar kartu pratinjau (depan & belakang). Dipanggil dua kali: pertama
+    // LANGSUNG memakai data dari dropdown (foto menyusul), lalu sekali lagi
+    // setelah data lengkap + foto dari server tiba.
+    function gambarPreviewKartu(d, stripUrl, statusHtml) {
+      const wrapper = document.getElementById('hasilKartuAnggota');
+      const fotoValid = (typeof d.fotoDataUrl === 'string' && d.fotoDataUrl.indexOf('data:image/') === 0);
+      const dataKartu = {
+        nama: escapeHtml(d.nama),
+        nim: escapeHtml(d.nim),
+        jurusan: escapeHtml(d.jurusan),
+        kampus: escapeHtml(d.kampus),
+        fotoDataUrl: fotoValid ? d.fotoDataUrl : FOTO_KOSONG_DATA_URL
+      };
+
+      wrapper.innerHTML = `
+        <div class="text-center mb-5">
+          <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-id-card text-pink-700 mr-2"></i>Kartu Anggota Anda</h3>
+          <p class="text-sm text-gray-500">Anda sudah pernah membuat Kartu Anggota Ruang Baca. Berikut pratinjau kartu Anda (hanya untuk dilihat).</p>
+        </div>
+
+        <div id="kartuPreviewArea" style="pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;">
+          <div class="kartu-viewport">${htmlKartuDepan(dataKartu, stripUrl)}</div>
+          <div class="kartu-viewport">${htmlKartuBelakang()}</div>
+        </div>
+
+        <div class="text-center text-xs text-gray-500 mt-4">${statusHtml || ''}</div>
+      `;
+
+      hitungSkalaPreviewKartu();
+    }
+
     async function tampilkanPreviewKartu(data) {
       const token = ++kartuPreviewToken;
       kartuPreviewAktif = true;
@@ -1705,46 +1764,55 @@
 
       const wrapper = document.getElementById('hasilKartuAnggota');
       wrapper.classList.remove('hidden');
-      wrapper.innerHTML = '<div class="text-center text-gray-500 text-sm py-8"><i class="fa-solid fa-spinner animate-spin mr-2"></i> Memuat kartu anggota...</div>';
+
+      const nimKey = String(data.nim || '').trim();
+      const dariCache = kartuPreviewCache[nimKey] || null;
+
+      // Permintaan ke server dimulai SEKARANG (paralel dengan menyiapkan gambar
+      // gedung), bukan menunggu satu per satu.
+      const permintaan = dariCache ? null : ambilDataKartuDariServer(nimKey);
+      if (permintaan) permintaan.catch(function() {});
+
+      let stripUrl = null;
+      try { stripUrl = await buatStripGedung(); } catch (e) { stripUrl = null; }
+      stripUrl = stripUrl || KARTU_GEDUNG_DATA_URL;
+      if (token !== kartuPreviewToken) return;
+
+      const dataDropdown = { nama: data.nama, nim: data.nim, jurusan: data.jurusan, kampus: data.kampus, fotoDataUrl: '' };
+
+      // Kartu langsung tampil; foto menyusul begitu server selesai.
+      gambarPreviewKartu(
+        dariCache || dataDropdown,
+        stripUrl,
+        dariCache ? '' : '<i class="fa-solid fa-spinner animate-spin mr-1"></i> Memuat foto...'
+      );
+      wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (dariCache) return;
 
       try {
-        const res = await fetch(WEB_APP_URL + '?action=getKartuAnggota&nim=' + encodeURIComponent(data.nim));
-        const json = await res.json();
+        const dataServer = await permintaan;
         if (token !== kartuPreviewToken) return;
-        if (!json.success || !json.data) throw new Error(json.message || 'Data kartu anggota tidak ditemukan.');
-
-        let stripUrl = null;
-        try { stripUrl = await buatStripGedung(); } catch (e) { stripUrl = null; }
-        if (token !== kartuPreviewToken) return;
-
-        const d = json.data;
-        const fotoValid = (typeof d.fotoDataUrl === 'string' && d.fotoDataUrl.indexOf('data:image/') === 0);
-        const dataKartu = {
-          nama: escapeHtml(d.nama),
-          nim: escapeHtml(d.nim),
-          jurusan: escapeHtml(d.jurusan),
-          kampus: escapeHtml(d.kampus),
-          fotoDataUrl: fotoValid ? d.fotoDataUrl : FOTO_KOSONG_DATA_URL
-        };
-
-        wrapper.innerHTML = `
-          <div class="text-center mb-5">
-            <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-id-card text-pink-700 mr-2"></i>Kartu Anggota Anda</h3>
-            <p class="text-sm text-gray-500">Anda sudah pernah membuat Kartu Anggota Ruang Baca. Berikut pratinjau kartu Anda (hanya untuk dilihat).</p>
-          </div>
-
-          <div id="kartuPreviewArea" style="pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;">
-            <div class="kartu-viewport">${htmlKartuDepan(dataKartu, stripUrl || KARTU_GEDUNG_DATA_URL)}</div>
-            <div class="kartu-viewport">${htmlKartuBelakang()}</div>
-          </div>
-        `;
-
-        hitungSkalaPreviewKartu();
-        wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        kartuPreviewCache[nimKey] = dataServer;
+        gambarPreviewKartu(dataServer, stripUrl, '');
       } catch (error) {
         if (token !== kartuPreviewToken) return;
-        tutupPreviewKartu();
-        Swal.fire('Pratinjau Gagal', 'Kartu anggota tidak dapat ditampilkan: ' + (error.message || 'terjadi kesalahan jaringan.'), 'error');
+
+        // Server memastikan kartu memang belum ada (mis. centang di sheet dihapus admin)
+        // -> tutup pratinjau supaya form pembuatan kartu bisa dipakai.
+        if (error && error.kartuBelumAda) {
+          tutupPreviewKartu();
+          Swal.fire('Perhatian', error.message, 'info');
+          return;
+        }
+
+        // Gangguan jaringan/server -> kartu tetap tampil (tanpa foto) + tombol coba lagi.
+        console.error('Pratinjau kartu gagal:', error);
+        gambarPreviewKartu(
+          dataDropdown,
+          stripUrl,
+          '<span class="text-red-600 font-semibold">Foto belum bisa dimuat.</span> ' +
+          '<button type="button" class="font-semibold text-pink-700 underline" onclick="if (namaKartuTerpilih) tampilkanPreviewKartu(namaKartuTerpilih)">Coba lagi</button>'
+        );
       }
     }
 
