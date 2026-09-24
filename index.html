@@ -1620,6 +1620,12 @@
       if (listEl) listEl.classList.add('hidden');
     }
 
+    // REVISI (FITUR BARU): Ketika nama yang dipilih di tab "Kartu Anggota
+    // Ruang Baca" adalah mahasiswa yang SUDAH pernah membuat kartu, tampilkan
+    // PRATINJAU kartunya (depan & belakang) - hanya untuk dilihat. Tombol
+    // "Unduh PDF", kolom upload foto, dan tombol "Buat Kartu Anggota" tidak
+    // ditampilkan pada mode ini. Kalau namanya belum punya kartu, form
+    // tampil seperti biasa.
     function pilihNamaKartu(data) {
       document.getElementById('namaKartu').value = data.nama;
       document.getElementById('nimKartu').value = data.nim;
@@ -1627,6 +1633,119 @@
       document.getElementById('kampusKartu').value = data.kampus;
       namaKartuTerpilih = data;
       sembunyikanDropdownNamaKartu();
+
+      const nimTerpilih = String(data.nim || '').trim();
+      const sudahPunyaKartu = (window.globalDaftarKartuAnggotaNim || []).indexOf(nimTerpilih) !== -1;
+      if (sudahPunyaKartu) {
+        tampilkanPreviewKartu(data);
+      } else {
+        tutupPreviewKartu();
+      }
+    }
+
+    // Penanda mode pratinjau + token supaya respons lama (kalau pengunjung
+    // cepat-cepat memilih nama lain) tidak menimpa pratinjau yang terbaru.
+    let kartuPreviewAktif = false;
+    let kartuPreviewToken = 0;
+
+    // Gambar transparan 1x1 px, dipakai kalau foto mahasiswa tidak bisa dibaca.
+    const FOTO_KOSONG_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+    // Mengamankan teks sebelum disisipkan ke HTML kartu.
+    function escapeHtml(teks) {
+      return String(teks == null ? '' : teks)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // Menyembunyikan/menampilkan kolom upload foto & tombol "Buat Kartu Anggota".
+    function aturModePratinjauKartu(aktif) {
+      const fotoInput = document.getElementById('fotoKartu');
+      const btnSubmit = document.getElementById('btnSubmitKartu');
+      if (fotoInput) {
+        // Kolom foto (label + input + keterangan) dibungkus satu <div>
+        if (fotoInput.parentElement) fotoInput.parentElement.style.display = aktif ? 'none' : '';
+        fotoInput.required = !aktif;
+        if (aktif) fotoInput.value = '';
+      }
+      if (btnSubmit) btnSubmit.style.display = aktif ? 'none' : '';
+    }
+
+    // Menutup pratinjau & mengembalikan form ke kondisi normal.
+    function tutupPreviewKartu() {
+      if (!kartuPreviewAktif) return;
+      kartuPreviewAktif = false;
+      kartuPreviewToken++;
+      const wrapper = document.getElementById('hasilKartuAnggota');
+      wrapper.innerHTML = '';
+      wrapper.classList.add('hidden');
+      aturModePratinjauKartu(false);
+    }
+
+    // Skala kartu 1011 px supaya pas selebar wadahnya (sama seperti kartu hasil pembuatan).
+    function hitungSkalaPreviewKartu() {
+      document.querySelectorAll('#kartuPreviewArea .kartu-viewport').forEach(function(vp) {
+        const lebar = vp.getBoundingClientRect().width;
+        if (lebar > 0) vp.style.setProperty('--kartu-skala', (lebar / KARTU_PX_LEBAR).toFixed(5));
+      });
+    }
+    window.addEventListener('resize', hitungSkalaPreviewKartu);
+
+    // Kalau nama diketik ulang setelah pratinjau muncul, pratinjau ditutup.
+    document.getElementById('namaKartu').addEventListener('input', tutupPreviewKartu);
+
+    async function tampilkanPreviewKartu(data) {
+      const token = ++kartuPreviewToken;
+      kartuPreviewAktif = true;
+      aturModePratinjauKartu(true);
+      pasangGayaKartu();
+
+      const wrapper = document.getElementById('hasilKartuAnggota');
+      wrapper.classList.remove('hidden');
+      wrapper.innerHTML = '<div class="text-center text-gray-500 text-sm py-8"><i class="fa-solid fa-spinner animate-spin mr-2"></i> Memuat kartu anggota...</div>';
+
+      try {
+        const res = await fetch(WEB_APP_URL + '?action=getKartuAnggota&nim=' + encodeURIComponent(data.nim));
+        const json = await res.json();
+        if (token !== kartuPreviewToken) return;
+        if (!json.success || !json.data) throw new Error(json.message || 'Data kartu anggota tidak ditemukan.');
+
+        let stripUrl = null;
+        try { stripUrl = await buatStripGedung(); } catch (e) { stripUrl = null; }
+        if (token !== kartuPreviewToken) return;
+
+        const d = json.data;
+        const fotoValid = (typeof d.fotoDataUrl === 'string' && d.fotoDataUrl.indexOf('data:image/') === 0);
+        const dataKartu = {
+          nama: escapeHtml(d.nama),
+          nim: escapeHtml(d.nim),
+          jurusan: escapeHtml(d.jurusan),
+          kampus: escapeHtml(d.kampus),
+          fotoDataUrl: fotoValid ? d.fotoDataUrl : FOTO_KOSONG_DATA_URL
+        };
+
+        wrapper.innerHTML = `
+          <div class="text-center mb-5">
+            <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-id-card text-pink-700 mr-2"></i>Kartu Anggota Anda</h3>
+            <p class="text-sm text-gray-500">Anda sudah pernah membuat Kartu Anggota Ruang Baca. Berikut pratinjau kartu Anda (hanya untuk dilihat).</p>
+          </div>
+
+          <div id="kartuPreviewArea" style="pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;">
+            <div class="kartu-viewport">${htmlKartuDepan(dataKartu, stripUrl || KARTU_GEDUNG_DATA_URL)}</div>
+            <div class="kartu-viewport">${htmlKartuBelakang()}</div>
+          </div>
+        `;
+
+        hitungSkalaPreviewKartu();
+        wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (error) {
+        if (token !== kartuPreviewToken) return;
+        tutupPreviewKartu();
+        Swal.fire('Pratinjau Gagal', 'Kartu anggota tidak dapat ditampilkan: ' + (error.message || 'terjadi kesalahan jaringan.'), 'error');
+      }
     }
 
     document.getElementById('namaKartuDropdownList').addEventListener('click', function(e) {
